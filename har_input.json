@@ -1,0 +1,38 @@
+{
+  "log": {
+    "version": "1.2",
+    "entries": [
+      {
+        "request": {
+          "method": "GET",
+          "url": "https://httpbin.org/get",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://httpbin.org/post",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "postData": {
+            "mimeType": "application/json",
+            "text": "{\"test\": \"har_parsing\"}"
+          }
+        }
+      }
+    ]
+  },
+  "sla": {
+    "http_req_duration_p95_ms": 1000
+  }
+}

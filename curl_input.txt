@@ -1,0 +1,24 @@
+Here is a sample input with curl commands.
+
+```bash
+curl -X GET "https://reqres.in/api/users?page=2" \
+     -H "Accept: application/json"
+
+curl -X POST "https://reqres.in/api/users" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "morpheus", "job": "leader"}'
+```
+
+```json
+{
+  "workload_scenario": {
+    "executor": "constant-vus",
+    "vus": 5,
+    "duration": "10s"
+  },
+  "sla": {
+    "http_req_duration_p95_ms": 500,
+    "http_req_failed_rate_max": 0.01
+  }
+}
+```

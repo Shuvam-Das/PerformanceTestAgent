@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Performance Test Agent</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <style>
+      body {
+        background-color: #f8f9fa;
+      }
+      .console-output {
+        background-color: #1e1e1e;
+        color: #00ff00;
+        font-family: "Courier New", Courier, monospace;
+        padding: 15px;
+        height: 400px;
+        overflow-y: auto;
+        border-radius: 5px;
+        font-size: 0.9rem;
+      }
+      .console-line {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+      .console-err {
+        color: #ff4444;
+      }
+      .nav-tabs .nav-link.active {
+        font-weight: bold;
+        border-top: 3px solid #0d6efd;
+      }
+    </style>
+  </head>
+  <body class="p-4">
+    <div class="container">
+      <header class="mb-4 pb-2 border-bottom">
+        <h1>🚀 Performance Test Agent</h1>
+        <p class="text-muted">Autonomous Load Testing Pipeline Orchestrator</p>
+      </header>
+
+      <div class="row">
+        <!-- Configuration Panel -->
+        <div class="col-md-5">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <ul
+                class="nav nav-tabs card-header-tabs"
+                id="inputTabs"
+                role="tablist"
+              >
+                <li class="nav-item">
+                  <button
+                    class="nav-link active"
+                    id="file-tab"
+                    data-bs-toggle="tab"
+                    data-bs-target="#file-pane"
+                    type="button"
+                  >
+                    Local File
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button
+                    class="nav-link"
+                    id="jira-tab"
+                    data-bs-toggle="tab"
+                    data-bs-target="#jira-pane"
+                    type="button"
+                  >
+                    Jira Story
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button
+                    class="nav-link"
+                    id="history-tab"
+                    data-bs-toggle="tab"
+                    data-bs-target="#history-pane"
+                    type="button"
+                    onclick="loadHistory()"
+                  >
+                    History
+                  </button>
+                </li>
+              </ul>
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label">Configuration Profile</label>
+                <select class="form-select" id="configProfile">
+                  <option value="config.yaml" selected>
+                    Default (config.yaml)
+                  </option>
+                </select>
+              </div>
+              <div class="tab-content">
+                <!-- File Input -->
+                <div class="tab-pane fade show active" id="file-pane">
+                  <div class="mb-3">
+                    <label class="form-label">Upload File</label>
+                    <div class="input-group mb-2">
+                      <input
+                        class="form-control"
+                        type="file"
+                        id="fileUpload"
+                        accept=".json,.yaml,.yml,.txt,.har"
+                      />
+                      <button
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        id="clearBtn"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <label class="form-label">Or Paste Content</label>
+                    <textarea
+                      class="form-control font-monospace"
+                      id="fileContent"
+                      rows="10"
+                      placeholder='{ "api_collection": ... }'
+                    ></textarea>
+                    <div class="form-text">
+                      Upload or paste your API collection, SLA, and Scenario
+                      here.
+                    </div>
+                  </div>
+                </div>
+                <!-- Jira Input -->
+                <div class="tab-pane fade" id="jira-pane">
+                  <div class="mb-3">
+                    <label class="form-label">Jira Base URL</label>
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="jiraUrl"
+                      placeholder="https://your-domain.atlassian.net"
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Issue Key</label>
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="jiraKey"
+                      placeholder="PROJ-123"
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Auth Token / Basic Auth</label>
+                    <input type="password" class="form-control" id="jiraAuth" />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Webhook URL (Optional)</label>
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="webhookUrl"
+                      placeholder="https://hooks.slack.com/services/..."
+                    />
+                  </div>
+                </div>
+                <!-- History Pane -->
+                <div class="tab-pane fade" id="history-pane">
+                  <div
+                    class="d-flex justify-content-between align-items-center mt-3 mb-2"
+                  >
+                    <h6 class="mb-0">Past Runs</h6>
+                    <button
+                      id="compareBtn"
+                      class="btn btn-sm btn-primary"
+                      disabled
+                      onclick="compareRuns()"
+                    >
+                      Compare Selected (0)
+                    </button>
+                    <button
+                      id="deleteBtn"
+                      class="btn btn-sm btn-danger ms-2"
+                      disabled
+                      onclick="deleteRuns()"
+                    >
+                      Delete Selected
+                    </button>
+                  </div>
+                  <div class="list-group" id="historyList">
+                    <div class="text-center text-muted">
+                      Select tab to refresh...
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" id="dryRun" />
+                <label class="form-check-label" for="dryRun">
+                  Dry Run (Skip execution, generate artifacts only)
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="verbose" />
+                <label class="form-check-label" for="verbose">
+                  Verbose Logging
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="clean" />
+                <label class="form-check-label" for="clean">
+                  Clean Output Directory
+                </label>
+              </div>
+              <div class="mb-3 mt-3">
+                <label for="cleanupThreshold" class="form-label"
+                  >Cleanup Threshold (%)</label
+                >
+                <input
+                  type="range"
+                  class="form-range"
+                  id="cleanupThreshold"
+                  min="10"
+                  max="95"
+                  value="90"
+                  oninput="this.nextElementSibling.value = this.value"
+                />
+                <output>90</output>
+              </div>
+              <div class="mb-3">
+                <label for="parallel" class="form-label"
+                  >Parallel Containers</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="parallel"
+                  value="1"
+                  min="1"
+                  max="10"
+                />
+              </div>
+              <button
+                id="runBtn"
+                class="btn btn-primary w-100 mt-3"
+                onclick="runAgent()"
+              >
+                Run Pipeline
+              </button>
+              <button
+                id="stopBtn"
+                class="btn btn-danger w-100 mt-2"
+                onclick="stopAgent()"
+                disabled
+              >
+                Stop Execution
+              </button>
+              <button
+                id="saveConfigBtn"
+                class="btn btn-outline-secondary w-100 mt-2"
+                onclick="saveConfig()"
+              >
+                Save as Default Config
+              </button>
+              <button
+                id="createProfileBtn"
+                class="btn btn-outline-success w-100 mt-2"
+                onclick="openCreateProfileModal()"
+              >
+                Create New Profile
+              </button>
+              <button
+                id="editConfigBtn"
+                class="btn btn-outline-secondary w-100 mt-2"
+                onclick="openConfigEditor()"
+              >
+                Edit Config File
+              </button>
+              <button
+                id="resetConfigBtn"
+                class="btn btn-outline-danger w-100 mt-2"
+                onclick="resetConfig()"
+              >
+                Reset Config
+              </button>
+              <button
+                id="showEnvBtn"
+                class="btn btn-outline-info w-100 mt-2"
+                onclick="showEnvVars()"
+              >
+                Show Server Env
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Panel -->
+        <div class="col-md-7">
+          <div class="card shadow-sm h-100">
+            <div class="card-header">
+              <div class="d-flex justify-content-between align-items-center">
+                <ul
+                  class="nav nav-tabs card-header-tabs"
+                  id="outputTabs"
+                  role="tablist"
+                >
+                  <li class="nav-item">
+                    <button
+                      class="nav-link active"
+                      id="console-tab"
+                      data-bs-toggle="tab"
+                      data-bs-target="#console-pane"
+                      type="button"
+                    >
+                      Console
+                    </button>
+                  </li>
+                  <li class="nav-item">
+                    <button
+                      class="nav-link"
+                      id="live-tab"
+                      data-bs-toggle="tab"
+                      data-bs-target="#live-pane"
+                      type="button"
+                    >
+                      Live Logs
+                    </button>
+                  </li>
+                </ul>
+                <span id="statusBadge" class="badge bg-secondary">Idle</span>
+              </div>
+            </div>
+            <div class="card-body p-0 d-flex flex-column" style="height: 400px">
+              <div class="tab-content h-100">
+                <!-- Console Pane -->
+                <div class="tab-pane fade show active h-100" id="console-pane">
+                  <div
+                    id="console"
+                    class="console-output h-100"
+                    style="border-radius: 0"
+                  ></div>
+                </div>
+                <!-- Live Logs Pane -->
+                <div
+                  class="tab-pane fade h-100 p-3"
+                  id="live-pane"
+                  style="overflow-y: auto"
+                >
+                  <div class="row">
+                    <div class="col-12 mb-3">
+                      <canvas
+                        id="liveLatencyChart"
+                        style="max-height: 180px"
+                      ></canvas>
+                    </div>
+                    <div class="col-12">
+                      <canvas
+                        id="liveRpsChart"
+                        style="max-height: 180px"
+                      ></canvas>
+                    </div>
+                    <div class="col-12">
+                      <canvas
+                        id="liveVUsChart"
+                        style="max-height: 180px"
+                      ></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card-footer" id="resultLinks" style="display: none">
+              <strong>Artifacts: </strong>
+              <a
+                href="#"
+                id="summaryLink"
+                target="_blank"
+                class="btn btn-sm btn-outline-success"
+                >Summary Report</a
+              >
+              <a
+                href="#"
+                id="resultsLink"
+                target="_blank"
+                class="btn btn-sm btn-outline-secondary"
+                >Raw Results</a
+              >
+              <a
+                href="#"
+                id="pdfLink"
+                target="_blank"
+                class="btn btn-sm btn-outline-danger"
+                >PDF Report</a
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Modal -->
+    <div
+      class="modal fade"
+      id="comparisonModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div
+        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+      >
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Comparison Result</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <pre
+              id="comparisonOutput"
+              class="p-3 bg-light border rounded"
+              style="white-space: pre-wrap; font-family: monospace"
+            ></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Modal -->
+    <div class="modal fade" id="chartModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Test Results Visualization</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <canvas id="latencyChart" class="mb-4"></canvas>
+            <canvas id="rpsChart"></canvas>
+            <div
+              id="chartLoading"
+              class="text-center text-muted"
+              style="display: none"
+            >
+              <div class="spinner-border spinner-border-sm" role="status"></div>
+              Loading data...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Env Vars Modal -->
+    <div class="modal fade" id="envModal" tabindex="-1" aria-hidden="true">
+      <div
+        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+      >
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Server Environment Variables</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <input
+              type="text"
+              id="envSearch"
+              class="form-control mb-3"
+              placeholder="Search variables..."
+            />
+            <table
+              class="table table-sm table-striped table-hover font-monospace"
+              style="font-size: 0.85rem"
+            >
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody id="envTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Profile Modal -->
+    <div
+      class="modal fade"
+      id="createProfileModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Create New Profile</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="newProfileName" class="form-label"
+                >Profile Name</label
+              >
+              <div class="input-group">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="newProfileName"
+                  placeholder="e.g. staging"
+                />
+                <span class="input-group-text">.yaml</span>
+              </div>
+              <div class="form-text">
+                Creates a new configuration file with default values.
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick="createProfile()"
+            >
+              Create
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config Editor Modal -->
+    <div
+      class="modal fade"
+      id="configEditorModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Configuration (config.yaml)</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <textarea
+              id="configEditorContent"
+              class="form-control font-monospace"
+              rows="15"
+              spellcheck="false"
+            ></textarea>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick="saveRawConfig()"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Clear Button Handler
+      document
+        .getElementById("clearBtn")
+        .addEventListener("click", function () {
+          document.getElementById("fileUpload").value = "";
+          document.getElementById("fileContent").value = "";
+        });
+
+      // File Upload Handler
+      document
+        .getElementById("fileUpload")
+        .addEventListener("change", function (e) {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            document.getElementById("fileContent").value = e.target.result;
+          };
+          reader.readAsText(file);
+        });
+
+      async function runAgent() {
+        const mode =
+          document.querySelector(".nav-link.active").id === "jira-tab"
+            ? "jira"
+            : "file";
+        const consoleDiv = document.getElementById("console");
+        const runBtn = document.getElementById("runBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const statusBadge = document.getElementById("statusBadge");
+        const resultLinks = document.getElementById("resultLinks");
+
+        // Client-side Validation
+        if (mode === "file") {
+          const content = document.getElementById("fileContent").value;
+          if (content.trim()) {
+            try {
+              JSON.parse(content);
+            } catch (eJson) {
+              try {
+                jsyaml.load(content);
+              } catch (eYaml) {
+                alert(
+                  "Validation Error: Input is neither valid JSON nor YAML.\n\nJSON: " +
+                    eJson.message +
+                    "\nYAML: " +
+                    eYaml.message
+                );
+                return;
+              }
+            }
+          }
+        }
+
+        // Prepare Payload
+        const payload = {
+          mode,
+          dryRun: document.getElementById("dryRun").checked,
+          verbose: document.getElementById("verbose").checked,
+          clean: document.getElementById("clean").checked,
+          configProfile: document.getElementById("configProfile").value,
+          cleanupThreshold: document.getElementById("cleanupThreshold").value,
+          parallel: document.getElementById("parallel").value,
+        };
+
+        if (mode === "jira") {
+          payload.jira = {
+            base_url: document.getElementById("jiraUrl").value,
+            issue_key: document.getElementById("jiraKey").value,
+            auth: document.getElementById("jiraAuth").value,
+            webhookUrl: document.getElementById("webhookUrl").value,
+          };
+        } else {
+          payload.fileContent = document.getElementById("fileContent").value;
+        }
+
+        // Reset UI
+        consoleDiv.innerHTML = "";
+        runBtn.disabled = true;
+        runBtn.textContent = "Running...";
+        stopBtn.disabled = false;
+        statusBadge.className = "badge bg-warning text-dark";
+        statusBadge.textContent = "Running";
+        resultLinks.style.display = "none";
+
+        // Initialize Live Charts
+        initLiveCharts();
+
+        try {
+          const response = await fetch("/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
+
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+
+                if (data.type === "stdout" || data.type === "stderr") {
+                  if (data.message.startsWith("[METRIC] ")) {
+                    updateLiveCharts(data.message.substring(9));
+                    return;
+                  }
+
+                  const p = document.createElement("p");
+                  p.className = `console-line ${
+                    data.type === "stderr" ? "console-err" : ""
+                  }`;
+                  p.textContent = data.message;
+                  consoleDiv.appendChild(p);
+                  consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+                  // Detect Results Path for linking
+                  if (
+                    data.message.includes("[STATUS] Starting Agent. Results:")
+                  ) {
+                    const path = data.message.split("Results: ")[1].trim();
+                    // Normalize path for URL
+                    const urlPath = path.replace(/\\/g, "/");
+                    document.getElementById(
+                      "summaryLink"
+                    ).href = `/${urlPath}/summary.md`;
+                    document.getElementById(
+                      "resultsLink"
+                    ).href = `/${urlPath}/test_results.json`;
+                    document.getElementById(
+                      "pdfLink"
+                    ).href = `/${urlPath}/report.pdf`;
+                    resultLinks.style.display = "block";
+                  }
+                } else if (data.type === "done") {
+                  statusBadge.className =
+                    data.code.code === 0
+                      ? "badge bg-success"
+                      : "badge bg-danger";
+                  statusBadge.textContent =
+                    data.code.code === 0 ? "Completed" : "Failed";
+                }
+              }
+            });
+          }
+        } catch (e) {
+          consoleDiv.innerHTML += `<p class="console-err">Error: ${e.message}</p>`;
+        } finally {
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Pipeline";
+          stopBtn.disabled = true;
+        }
+      }
+
+      async function stopAgent() {
+        const stopBtn = document.getElementById("stopBtn");
+        if (!confirm("Are you sure you want to stop the execution?")) return;
+
+        try {
+          const res = await fetch("/stop", { method: "POST" });
+          const data = await res.json();
+          alert(data.message);
+        } catch (e) {
+          alert("Error stopping agent: " + e.message);
+        }
+      }
+
+      let liveLatencyChart = null;
+      let liveRpsChart = null;
+      let liveVUsChart = null;
+      let rpsBuckets = {};
+
+      function initLiveCharts() {
+        rpsBuckets = {};
+
+        const ctxLat = document
+          .getElementById("liveLatencyChart")
+          .getContext("2d");
+        if (liveLatencyChart) liveLatencyChart.destroy();
+        liveLatencyChart = new Chart(ctxLat, {
+          type: "scatter",
+          data: {
+            datasets: [
+              {
+                label: "Latency (ms)",
+                data: [],
+                backgroundColor: "rgba(255, 99, 132, 0.5)",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: {
+                type: "linear",
+                position: "bottom",
+                title: { display: true, text: "Time (s)" },
+              },
+              y: { title: { display: true, text: "ms" }, min: 0 },
+            },
+            plugins: { title: { display: true, text: "Live Latency" } },
+          },
+        });
+
+        const ctxRps = document.getElementById("liveRpsChart").getContext("2d");
+        if (liveRpsChart) liveRpsChart.destroy();
+        liveRpsChart = new Chart(ctxRps, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "RPS",
+                data: [],
+                borderColor: "rgba(54, 162, 235, 1)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { title: { display: true, text: "Time (s)" } },
+              y: { title: { display: true, text: "Req/s" }, beginAtZero: true },
+            },
+            plugins: { title: { display: true, text: "Live Throughput" } },
+          },
+        });
+
+        const ctxVUs = document.getElementById("liveVUsChart").getContext("2d");
+        if (liveVUsChart) liveVUsChart.destroy();
+        liveVUsChart = new Chart(ctxVUs, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                label: "Virtual Users",
+                data: [],
+                borderColor: "rgba(75, 192, 192, 1)",
+                stepped: true,
+                fill: true,
+                backgroundColor: "rgba(75, 192, 192, 0.2)",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: {
+                type: "linear",
+                position: "bottom",
+                title: { display: true, text: "Time (s)" },
+              },
+              y: { title: { display: true, text: "VUs" }, beginAtZero: true },
+            },
+            plugins: { title: { display: true, text: "Live VUs" } },
+          },
+        });
+      }
+
+      let startTime = null;
+
+      function updateLiveCharts(jsonStr) {
+        try {
+          const data = JSON.parse(jsonStr);
+          const time = new Date(data.data.time).getTime();
+          if (!startTime) startTime = time;
+          const relTime = (time - startTime) / 1000;
+
+          if (data.metric === "http_req_duration") {
+            liveLatencyChart.data.datasets[0].data.push({
+              x: relTime,
+              y: data.data.value,
+            });
+            if (liveLatencyChart.data.datasets[0].data.length > 500)
+              liveLatencyChart.data.datasets[0].data.shift();
+            liveLatencyChart.update("none");
+          } else if (data.metric === "http_reqs") {
+            const sec = Math.floor(relTime);
+            rpsBuckets[sec] = (rpsBuckets[sec] || 0) + 1;
+
+            // Update RPS chart data from buckets
+            const secs = Object.keys(rpsBuckets).sort((a, b) => a - b);
+            liveRpsChart.data.labels = secs;
+            liveRpsChart.data.datasets[0].data = secs.map((s) => rpsBuckets[s]);
+            liveRpsChart.update("none");
+          } else if (data.metric === "vus") {
+            liveVUsChart.data.datasets[0].data.push({
+              x: relTime,
+              y: data.data.value,
+            });
+            if (liveVUsChart.data.datasets[0].data.length > 500)
+              liveVUsChart.data.datasets[0].data.shift();
+            liveVUsChart.update("none");
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      let selectedRuns = [];
+
+      function toggleRunSelection(folder) {
+        const idx = selectedRuns.indexOf(folder);
+        if (idx > -1) {
+          selectedRuns.splice(idx, 1);
+        } else {
+          if (selectedRuns.length >= 2) {
+            const first = selectedRuns.shift();
+            const cb = document.querySelector(`input[value="${first}"]`);
+            if (cb) cb.checked = false;
+          }
+          selectedRuns.push(folder);
+        }
+        updateSelectionButtons();
+      }
+
+      function updateSelectionButtons() {
+        const delBtn = document.getElementById("deleteBtn");
+        delBtn.disabled = selectedRuns.length === 0;
+        delBtn.textContent =
+          selectedRuns.length > 0
+            ? `Delete Selected (${selectedRuns.length})`
+            : "Delete Selected";
+
+        const btn = document.getElementById("compareBtn");
+        btn.textContent = `Compare Selected (${selectedRuns.length})`;
+        btn.disabled = selectedRuns.length !== 2;
+      }
+
+      async function loadHistory() {
+        selectedRuns = [];
+        updateSelectionButtons();
+        const list = document.getElementById("historyList");
+        list.innerHTML =
+          '<div class="text-center text-muted p-3">Loading...</div>';
+        try {
+          const res = await fetch("/api/history");
+          const folders = await res.json();
+
+          list.innerHTML = "";
+          if (!folders || folders.length === 0) {
+            list.innerHTML =
+              '<div class="text-center text-muted p-3">No results found.</div>';
+            return;
+          }
+
+          folders.forEach((folder) => {
+            const item = document.createElement("div");
+            item.className = "list-group-item";
+            item.innerHTML = `
+              <div class="d-flex w-100 align-items-center">
+                <div class="me-3">
+                  <input type="checkbox" class="form-check-input" value="${folder}" onchange="toggleRunSelection('${folder}')">
+                </div>
+                <div class="flex-grow-1 d-flex justify-content-between align-items-center">
+                <span class="fw-bold small">${folder}</span>
+                <div>
+                  <a href="/results/${folder}/summary.md" target="_blank" class="btn btn-sm btn-outline-primary py-0" style="font-size: 0.75rem;">Summary</a>
+                  <a href="/results/${folder}/test_results.json" target="_blank" class="btn btn-sm btn-outline-secondary py-0" style="font-size: 0.75rem;">JSON</a>
+                  <a href="/results/${folder}/report.pdf" target="_blank" class="btn btn-sm btn-outline-danger py-0" style="font-size: 0.75rem;">PDF</a>
+                  <a href="/api/download/${folder}" class="btn btn-sm btn-outline-dark py-0" style="font-size: 0.75rem;">Download All</a>
+                  <button onclick="viewCharts('${folder}')" class="btn btn-sm btn-outline-info py-0" style="font-size: 0.75rem;">Charts</button>
+                </div>
+                </div>
+              </div>
+              <div class="mt-1">
+                 <a href="/results/${folder}/script.js" target="_blank" class="text-decoration-none small text-muted ms-4">View Script</a>
+              </div>
+            `;
+            list.appendChild(item);
+          });
+        } catch (e) {
+          list.innerHTML = `<div class="text-danger p-3">Error: ${e.message}</div>`;
+        }
+      }
+
+      async function compareRuns() {
+        if (selectedRuns.length !== 2) return;
+
+        const modalEl = document.getElementById("comparisonModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const output = document.getElementById("comparisonOutput");
+        output.textContent = "Comparing...";
+        modal.show();
+
+        try {
+          const response = await fetch("/compare", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folder1: selectedRuns[0],
+              folder2: selectedRuns[1],
+            }),
+          });
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          output.textContent = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
+
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+                if (data.type === "stdout") {
+                  output.textContent += data.message + "\n";
+                }
+              }
+            });
+          }
+        } catch (e) {
+          output.textContent += `\nError: ${e.message}`;
+        }
+      }
+
+      async function deleteRuns() {
+        if (selectedRuns.length === 0) return;
+        if (
+          !confirm(
+            `Are you sure you want to delete ${selectedRuns.length} run(s)? This cannot be undone.`
+          )
+        )
+          return;
+
+        try {
+          const res = await fetch("/api/delete-run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folders: selectedRuns }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            loadHistory(); // Refresh list
+          } else {
+            alert("Error deleting runs: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      let latencyChartInstance = null;
+      let rpsChartInstance = null;
+
+      async function viewCharts(folder) {
+        const modalEl = document.getElementById("chartModal");
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        const loading = document.getElementById("chartLoading");
+        loading.style.display = "block";
+
+        if (latencyChartInstance) latencyChartInstance.destroy();
+        if (rpsChartInstance) rpsChartInstance.destroy();
+
+        try {
+          const res = await fetch(`/results/${folder}/test_results.json`);
+          if (!res.ok) throw new Error("Results file not found");
+
+          const text = await res.text();
+          const lines = text.split("\n").filter((l) => l.trim());
+
+          // Parse NDJSON
+          const dataPoints = lines
+            .map((l) => {
+              try {
+                return JSON.parse(l);
+              } catch (e) {
+                return null;
+              }
+            })
+            .filter((d) => d && d.type === "Point");
+
+          // Process Data
+          // 1. Latency (http_req_duration)
+          const latencyPoints = dataPoints
+            .filter((d) => d.metric === "http_req_duration")
+            .map((d) => ({ x: new Date(d.data.time), y: d.data.value }));
+
+          // 2. RPS (http_reqs) - Aggregate by second
+          const rpsMap = new Map();
+          dataPoints
+            .filter((d) => d.metric === "http_reqs")
+            .forEach((d) => {
+              const sec = new Date(d.data.time).setMilliseconds(0);
+              rpsMap.set(sec, (rpsMap.get(sec) || 0) + 1);
+            });
+          const rpsPoints = Array.from(rpsMap.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([time, count]) => ({ x: new Date(time), y: count }));
+
+          // Render Charts
+          const ctxLatency = document
+            .getElementById("latencyChart")
+            .getContext("2d");
+          latencyChartInstance = new Chart(ctxLatency, {
+            type: "scatter",
+            data: {
+              datasets: [
+                {
+                  label: "Latency (ms)",
+                  data: latencyPoints,
+                  backgroundColor: "rgba(255, 99, 132, 0.5)",
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: {
+                x: {
+                  type: "linear",
+                  position: "bottom",
+                  title: { display: true, text: "Time" },
+                  ticks: {
+                    callback: (val) => new Date(val).toLocaleTimeString(),
+                  },
+                },
+                y: { title: { display: true, text: "Duration (ms)" } },
+              },
+              plugins: { title: { display: true, text: "Request Duration" } },
+            },
+          });
+
+          const ctxRps = document.getElementById("rpsChart").getContext("2d");
+          rpsChartInstance = new Chart(ctxRps, {
+            type: "line",
+            data: {
+              datasets: [
+                {
+                  label: "RPS",
+                  data: rpsPoints,
+                  borderColor: "rgba(54, 162, 235, 1)",
+                  tension: 0.1,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: {
+                x: {
+                  type: "linear",
+                  position: "bottom",
+                  title: { display: true, text: "Time" },
+                  ticks: {
+                    callback: (val) => new Date(val).toLocaleTimeString(),
+                  },
+                },
+                y: {
+                  title: { display: true, text: "Requests / Sec" },
+                  beginAtZero: true,
+                },
+              },
+              plugins: { title: { display: true, text: "Throughput" } },
+            },
+          });
+        } catch (e) {
+          alert("Failed to load chart data: " + e.message);
+        } finally {
+          loading.style.display = "none";
+        }
+      }
+
+      async function saveConfig() {
+        const payload = {
+          jira: {
+            base_url: document.getElementById("jiraUrl").value,
+            issue_key: document.getElementById("jiraKey").value,
+            auth: document.getElementById("jiraAuth").value,
+          },
+        };
+
+        try {
+          const res = await fetch("/save-config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+          } else {
+            alert("Error saving config: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function resetConfig() {
+        if (
+          !confirm("Are you sure you want to delete the default configuration?")
+        )
+          return;
+        try {
+          const res = await fetch("/reset-config", { method: "POST" });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            // Clear fields
+            document.getElementById("jiraUrl").value = "";
+            document.getElementById("jiraKey").value = "";
+            document.getElementById("jiraAuth").value = "";
+          } else {
+            alert("Error resetting config: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function showEnvVars() {
+        const modalEl = document.getElementById("envModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const tbody = document.getElementById("envTableBody");
+
+        tbody.innerHTML =
+          '<tr><td colspan="2" class="text-center">Loading...</td></tr>';
+        modal.show();
+
+        try {
+          const res = await fetch("/api/env");
+          const envs = await res.json();
+
+          tbody.innerHTML = "";
+          Object.keys(envs)
+            .sort()
+            .forEach((key) => {
+              const row = document.createElement("tr");
+              row.innerHTML = `<td>${key}</td><td class="text-break">${envs[key]}</td>`;
+              tbody.appendChild(row);
+            });
+
+          // Search functionality
+          document.getElementById("envSearch").onkeyup = function () {
+            const val = this.value.toLowerCase();
+            const rows = tbody.getElementsByTagName("tr");
+            for (let i = 0; i < rows.length; i++) {
+              const text = rows[i].textContent.toLowerCase();
+              rows[i].style.display = text.includes(val) ? "" : "none";
+            }
+          };
+        } catch (e) {
+          tbody.innerHTML = `<tr><td colspan="2" class="text-danger">Error: ${e.message}</td></tr>`;
+        }
+      }
+
+      async function openConfigEditor() {
+        const modalEl = document.getElementById("configEditorModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const textarea = document.getElementById("configEditorContent");
+
+        textarea.value = "Loading...";
+        modal.show();
+
+        try {
+          const res = await fetch("/get-config-raw?file=config.yaml");
+          const data = await res.json();
+          if (res.ok) {
+            textarea.value = data.content || "";
+          } else {
+            textarea.value = "Error loading config: " + data.error;
+          }
+        } catch (e) {
+          textarea.value = "Error: " + e.message;
+        }
+      }
+
+      async function saveRawConfig() {
+        const content = document.getElementById("configEditorContent").value;
+        try {
+          const res = await fetch("/save-config-raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: "config.yaml", content: content }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            bootstrap.Modal.getInstance(
+              document.getElementById("configEditorModal")
+            ).hide();
+            // Reload config into form
+            window.dispatchEvent(new Event("DOMContentLoaded"));
+          } else {
+            alert("Error saving config: " + data.error);
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      function openCreateProfileModal() {
+        const modal = new bootstrap.Modal(
+          document.getElementById("createProfileModal")
+        );
+        document.getElementById("newProfileName").value = "";
+        modal.show();
+      }
+
+      async function createProfile() {
+        const nameInput = document.getElementById("newProfileName");
+        let name = nameInput.value.trim();
+        if (!name) {
+          alert("Please enter a profile name.");
+          return;
+        }
+        if (
+          !name.toLowerCase().endsWith(".yaml") &&
+          !name.toLowerCase().endsWith(".yml")
+        ) {
+          name += ".yaml";
+        }
+
+        const content = `jira_url: ""
+jira_key: ""
+jira_auth: ""
+output_dir: "./results"
+`;
+
+        try {
+          const res = await fetch("/save-config-raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: name, content: content }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            bootstrap.Modal.getInstance(
+              document.getElementById("createProfileModal")
+            ).hide();
+            await loadProfiles();
+            document.getElementById("configProfile").value = name;
+          } else {
+            alert("Error creating profile: " + data.error);
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function loadProfiles() {
+        try {
+          const res = await fetch("/api/profiles");
+          const profiles = await res.json();
+          const select = document.getElementById("configProfile");
+
+          select.innerHTML = "";
+
+          if (profiles.length === 0) {
+            const option = document.createElement("option");
+            option.text = "No profiles found";
+            select.add(option);
+            return;
+          }
+
+          profiles.forEach((p) => {
+            const option = document.createElement("option");
+            option.value = p;
+            option.text = p;
+            if (p === "config.yaml") option.selected = true;
+            select.add(option);
+          });
+        } catch (e) {
+          console.error("Failed to load profiles", e);
+        }
+      }
+
+      // Load Config on Startup
+      window.addEventListener("DOMContentLoaded", async () => {
+        loadProfiles();
+        try {
+          const res = await fetch("/get-config");
+          if (res.ok) {
+            const config = await res.json();
+            if (config.jira_url)
+              document.getElementById("jiraUrl").value = config.jira_url;
+            if (config.jira_key)
+              document.getElementById("jiraKey").value = config.jira_key;
+            if (config.jira_auth)
+              document.getElementById("jiraAuth").value = config.jira_auth;
+            if (config.webhook_url)
+              document.getElementById("webhookUrl").value = config.webhook_url;
+          }
+        } catch (e) {
+          console.error("Failed to load config:", e);
+        }
+      });
+    </script>
+  </body>
+</html>
