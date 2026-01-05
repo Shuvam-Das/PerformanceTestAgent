@@ -8,6 +8,9 @@ import io
 import zipfile
 import yaml
 import shutil
+import psutil
+import webbrowser
+from threading import Timer
 
 app = Flask(__name__)
 
@@ -19,7 +22,8 @@ def index():
 
 @app.route('/results/<path:filename>')
 def results(filename):
-    return send_from_directory('results', filename)
+    results_dir = os.path.join(os.getcwd(), 'results')
+    return send_from_directory(results_dir, filename)
 
 @app.route('/run', methods=['POST'])
 def run():
@@ -78,6 +82,9 @@ def run():
         if parallel:
             cmd.extend(['--parallel', str(parallel)])
 
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+
         # Run agent as subprocess
         # Merge stderr into stdout to simplify streaming
         proc = subprocess.Popen(
@@ -85,6 +92,9 @@ def run():
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding='utf-8',
+            errors='replace',
+            env=env,
             bufsize=1, # Line buffered
             universal_newlines=True
         )
@@ -285,5 +295,17 @@ def get_env_vars():
             safe_env[k] = v
     return jsonify(safe_env)
 
+@app.route('/api/system-health')
+def system_health():
+    health = {
+        'cpu_percent': psutil.cpu_percent(interval=0.1),
+        'memory_percent': psutil.virtual_memory().percent
+    }
+    return jsonify(health)
+
+def open_browser():
+    webbrowser.open_new_tab("http://127.0.0.1:3000")
+
 if __name__ == '__main__':
+    Timer(1, open_browser).start()
     app.run(host='0.0.0.0', port=3000)

@@ -351,11 +351,37 @@
                 >
                   <div class="row">
                     <div class="col-12 mb-3">
+                  <div class="row g-3">
+                    <!-- System Health Section -->
+                    <div class="col-md-4">
+                      <div class="card h-100">
+                        <div class="card-header bg-light py-2"><strong>System Health</strong></div>
+                        <div class="card-body">
+                          <h6 class="small mb-1">CPU Usage</h6>
+                          <div class="progress mb-3" style="height: 20px">
+                            <div id="cpuUsageBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                          </div>
+                          <h6 class="small mb-1">Memory Usage</h6>
+                          <div class="progress" style="height: 20px">
+                            <div id="memUsageBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Live Metrics Charts -->
+                    <div class="col-md-8">
+                      <div class="mb-3" style="height: 180px;">
                       <canvas
                         id="liveLatencyChart"
                         style="max-height: 180px"
+                        style="max-height: 100%; width: 100%;"
                       ></canvas>
+                      </div>
                     </div>
+                    
+                    <div class="col-12"><hr class="my-2"></div>
+
                     <div class="col-12">
                       <canvas
                         id="liveRpsChart"
@@ -368,6 +394,38 @@
                         style="max-height: 180px"
                       ></canvas>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card-footer bg-light">
+              <div class="row align-items-center">
+                <div class="col-md-6 border-end">
+                  <h6 class="small mb-1">CPU Usage</h6>
+                  <div class="progress" style="height: 15px">
+                    <div id="cpuUsageBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="small mb-1">Memory Usage</h6>
+                  <div class="progress" style="height: 15px">
+                    <div id="memUsageBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card-footer bg-light">
+              <div class="row align-items-center">
+                <div class="col-md-6 border-end">
+                  <h6 class="small mb-1">CPU Usage</h6>
+                  <div class="progress" style="height: 15px">
+                    <div id="cpuUsageBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="small mb-1">Memory Usage</h6>
+                  <div class="progress" style="height: 15px">
+                    <div id="memUsageBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
                   </div>
                 </div>
               </div>
@@ -735,7 +793,9 @@
                   ) {
                     const path = data.message.split("Results: ")[1].trim();
                     // Normalize path for URL
-                    const urlPath = path.replace(/\\/g, "/");
+                    const urlPath = path
+                      .replace(/\\/g, "/")
+                      .replace(/^\.\//, "");
                     document.getElementById(
                       "summaryLink"
                     ).href = `/${urlPath}/summary.md`;
@@ -1396,8 +1456,60 @@ output_dir: "./results"
         }
       }
 
+      let healthInterval = null;
+
+      function startHealthMonitor() {
+        if (healthInterval) return; // Already running
+
+        const updateHealth = async () => {
+          try {
+            const res = await fetch("/api/system-health");
+            if (!res.ok) throw new Error("Failed to fetch health data");
+            const data = await res.json();
+
+            const cpuBar = document.getElementById("cpuUsageBar");
+            const memBar = document.getElementById("memUsageBar");
+
+            cpuBar.style.width = data.cpu_percent + "%";
+            cpuBar.textContent = data.cpu_percent.toFixed(1) + "%";
+
+            memBar.style.width = data.memory_percent + "%";
+            memBar.textContent = data.memory_percent.toFixed(1) + "%";
+          } catch (e) {
+            console.error("Health monitor failed:", e);
+            stopHealthMonitor(); // Stop polling on error
+          }
+        };
+
+        updateHealth(); // Initial call
+        healthInterval = setInterval(updateHealth, 2500); // Update every 2.5 seconds
+      }
+
+      function stopHealthMonitor() {
+        if (healthInterval) {
+          clearInterval(healthInterval);
+          healthInterval = null;
+        }
+      }
+
       // Load Config on Startup
       window.addEventListener("DOMContentLoaded", async () => {
+        document
+          .querySelectorAll('#inputTabs button[data-bs-toggle="tab"]')
+          .forEach((tab) => {
+            // Remove health monitor trigger from input tabs since it's now in output panel
+          });
+
+        // Add listener for output tabs to start/stop health monitor
+        document
+          .querySelectorAll('#outputTabs button[data-bs-toggle="tab"]')
+          .forEach((tab) => {
+            tab.addEventListener("shown.bs.tab", function (event) {
+              if (event.target.id === "health-tab") startHealthMonitor();
+              if (event.target.id === "live-tab") startHealthMonitor();
+              else stopHealthMonitor();
+            });
+          });
         loadProfiles();
         try {
           const res = await fetch("/get-config");

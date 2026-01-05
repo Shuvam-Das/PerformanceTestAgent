@@ -309,46 +309,6 @@ class ExecutionAgent:
             with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
                 json.dump({"status": "skipped", "reason": "dry-run"}, f, indent=2)
 
-    def merge_summaries(self, result_dir, count, output_path):
-        merged = None
-        for i in range(count):
-            path = os.path.join(result_dir, f"summary_export_{i}.json")
-            if not os.path.exists(path): continue
-            
-            with open(path, 'r') as f:
-                data = json.load(f)
-            
-            if merged is None:
-                merged = data
-                continue
-            
-            # Merge logic for SLA metrics
-            if 'metrics' in data:
-                # http_req_duration: take max of p(95) for safety
-                if 'http_req_duration' in data['metrics']:
-                    m_val = merged['metrics']['http_req_duration']['values']
-                    d_val = data['metrics']['http_req_duration']['values']
-                    m_val['p(95)'] = max(m_val.get('p(95)', 0), d_val.get('p(95)', 0))
-                
-                # http_req_failed: aggregate counts and recalculate rate
-                if 'http_req_failed' in data['metrics']:
-                    m_val = merged['metrics']['http_req_failed']['values']
-                    d_val = data['metrics']['http_req_failed']['values']
-                    m_val['passes'] += d_val.get('passes', 0)
-                    m_val['fails'] += d_val.get('fails', 0)
-                    total = m_val['passes'] + m_val['fails']
-                    m_val['rate'] = m_val['passes'] / total if total > 0 else 0
-                
-                # http_reqs: sum counts and rates
-                if 'http_reqs' in data['metrics']:
-                    m_val = merged['metrics']['http_reqs']['values']
-                    d_val = data['metrics']['http_reqs']['values']
-                    m_val['count'] += d_val.get('count', 0)
-                    m_val['rate'] += d_val.get('rate', 0)
-
-        with open(output_path, 'w') as f:
-            json.dump(merged, f, indent=2)
-
 class MonitoringAgent:
     def __init__(self):
         self.total_reqs = 0
@@ -422,7 +382,7 @@ class MonitoringAgent:
         
         if not os.path.exists(file_path): return
 
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             while not stop_event.is_set():
                 line = f.readline()
                 if line:
@@ -468,7 +428,7 @@ class MonitoringAgent:
             path = os.path.join(result_dir, f"summary_export_{i}.json")
             if not os.path.exists(path): continue
             
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             if merged is None:
@@ -495,7 +455,7 @@ class MonitoringAgent:
                     m_val['count'] += d_val.get('count', 0)
                     m_val['rate'] += d_val.get('rate', 0)
 
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(merged, f, indent=2)
 
 class AnalysisAgent:
