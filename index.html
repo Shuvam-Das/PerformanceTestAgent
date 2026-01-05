@@ -15,22 +15,100 @@
       body {
         background-color: #f8f9fa;
       }
-      .console-output {
+      /* Professional Console Styling */
+      .console-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
         background-color: #1e1e1e;
-        color: #00ff00;
-        font-family: "Courier New", Courier, monospace;
-        padding: 15px;
-        height: 400px;
+        border-radius: 0 0 4px 4px;
+        overflow: hidden;
+      }
+      .console-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        padding: 4px 10px;
+        background-color: #252526;
+        border-bottom: 1px solid #333;
+      }
+      .console-toolbar button {
+        background: none;
+        border: none;
+        color: #cccccc;
+        font-size: 0.75rem;
+        margin-left: 15px;
+        cursor: pointer;
+        transition: color 0.2s;
+        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .console-toolbar button:hover {
+        color: #ffffff;
+      }
+      .console-toolbar button.active {
+        color: #007acc;
+      }
+      .console-output {
+        flex-grow: 1;
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+        font-family: "Consolas", "Monaco", "Courier New", monospace;
+        padding: 10px;
         overflow-y: auto;
-        border-radius: 5px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        line-height: 1.4;
       }
       .console-line {
         margin: 0;
         white-space: pre-wrap;
+        word-break: break-all;
+        display: flex;
       }
-      .console-err {
-        color: #ff4444;
+      .log-time {
+        color: #666;
+        margin-right: 10px;
+        flex-shrink: 0;
+        user-select: none;
+        min-width: 70px;
+      }
+      .log-msg {
+        flex-grow: 1;
+      }
+
+      /* Log Levels */
+      .log-info {
+        color: #9cdcfe;
+      }
+      .log-success {
+        color: #6a9955;
+      }
+      .log-warn {
+        color: #cca700;
+      }
+      .log-error {
+        color: #f48771;
+      }
+      .log-debug {
+        color: #808080;
+      }
+      .log-default {
+        color: #d4d4d4;
+      }
+
+      /* Scrollbar */
+      .console-output::-webkit-scrollbar {
+        width: 10px;
+      }
+      .console-output::-webkit-scrollbar-track {
+        background: #1e1e1e;
+      }
+      .console-output::-webkit-scrollbar-thumb {
+        background: #424242;
+        border-radius: 5px;
+      }
+      .console-output::-webkit-scrollbar-thumb:hover {
+        background: #4f4f4f;
       }
       .nav-tabs .nav-link.active {
         font-weight: bold;
@@ -707,6 +785,122 @@
           reader.readAsText(file);
         });
 
+      let autoScroll = true;
+
+      function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        const btn = document.getElementById("btnAutoScroll");
+        if (autoScroll) btn.classList.add("active");
+        else btn.classList.remove("active");
+      }
+
+      function clearConsole() {
+        document.getElementById("console").innerHTML = "";
+      }
+
+      function copyConsole() {
+        const text = document.getElementById("console").innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          // Optional: visual feedback
+        });
+      }
+
+      function downloadConsole() {
+        const text = document.getElementById("console").innerText;
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "console_log.txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function escapeHtml(text) {
+        if (!text) return text;
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function handleStreamData(data) {
+        const consoleDiv = document.getElementById("console");
+        const resultLinks = document.getElementById("resultLinks");
+        const statusBadge = document.getElementById("statusBadge");
+        const runBtn = document.getElementById("runBtn");
+        const stopBtn = document.getElementById("stopBtn");
+
+        if (data.type === "stdout" || data.type === "stderr") {
+          if (data.message.startsWith("[METRIC] ")) {
+            updateLiveCharts(data.message.substring(9));
+            return;
+          }
+
+          const div = document.createElement("div");
+
+          let levelClass = "log-default";
+          if (
+            data.type === "stderr" ||
+            data.message.includes("[ERROR]") ||
+            data.message.includes("Error:")
+          )
+            levelClass = "log-error";
+          else if (data.message.includes("[WARN]")) levelClass = "log-warn";
+          else if (
+            data.message.includes("[INFO]") ||
+            data.message.includes("[STATUS]")
+          )
+            levelClass = "log-info";
+          else if (
+            data.message.includes("[VERBOSE]") ||
+            data.message.includes("[DEBUG]")
+          )
+            levelClass = "log-debug";
+          else if (data.message.includes("[SUCCESS]"))
+            levelClass = "log-success";
+
+          div.className = `console-line ${levelClass}`;
+
+          const time = new Date().toLocaleTimeString("en-US", {
+            hour12: false,
+          });
+          div.innerHTML = `<span class="log-time">[${time}]</span><span class="log-msg">${escapeHtml(
+            data.message
+          )}</span>`;
+
+          consoleDiv.appendChild(div);
+          if (autoScroll) consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+          // Detect Results Path for linking
+          if (data.message.includes("[STATUS] Starting Agent. Results:")) {
+            const path = data.message.split("Results: ")[1].trim();
+            const urlPath = path.replace(/\\/g, "/").replace(/^\.\//, "");
+            document.getElementById(
+              "summaryLink"
+            ).href = `/${urlPath}/summary.md`;
+            document.getElementById(
+              "resultsLink"
+            ).href = `/${urlPath}/test_results.json`;
+            document.getElementById("pdfLink").href = `/${urlPath}/report.pdf`;
+            window.currentResultPath = urlPath;
+            resultLinks.style.display = "block";
+          }
+        } else if (data.type === "done") {
+          statusBadge.className =
+            data.code.code === 0 ? "badge bg-success" : "badge bg-danger";
+          statusBadge.textContent =
+            data.code.code === 0 ? "Completed" : "Failed";
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Pipeline";
+          stopBtn.disabled = true;
+        }
+      }
+
       async function runAgent() {
         const mode =
           document.querySelector(".nav-link.active").id === "jira-tab"
@@ -765,7 +959,7 @@
         }
 
         // Reset UI
-        consoleDiv.innerHTML = "";
+        clearConsole();
         runBtn.disabled = true;
         runBtn.textContent = "Running...";
         stopBtn.disabled = false;
@@ -796,53 +990,7 @@
             events.forEach((event) => {
               if (event.startsWith("data: ")) {
                 const data = JSON.parse(event.replace("data: ", ""));
-
-                if (data.type === "stdout" || data.type === "stderr") {
-                  if (data.message.startsWith("[METRIC] ")) {
-                    updateLiveCharts(data.message.substring(9));
-                    return;
-                  }
-
-                  const p = document.createElement("p");
-                  p.className = `console-line ${
-                    data.type === "stderr" ? "console-err" : ""
-                  }`;
-                  p.textContent = data.message;
-                  consoleDiv.appendChild(p);
-                  consoleDiv.scrollTop = consoleDiv.scrollHeight;
-
-                  // Detect Results Path for linking
-                  if (
-                    data.message.includes("[STATUS] Starting Agent. Results:")
-                  ) {
-                    const path = data.message.split("Results: ")[1].trim();
-                    // Normalize path for URL
-                    const urlPath = path
-                      .replace(/\\/g, "/")
-                      .replace(/^\.\//, "");
-                    document.getElementById(
-                      "summaryLink"
-                    ).href = `/${urlPath}/summary.md`;
-                    document.getElementById(
-                      "resultsLink"
-                    ).href = `/${urlPath}/test_results.json`;
-                    document.getElementById(
-                      "pdfLink"
-                    ).href = `/${urlPath}/report.pdf`;
-
-                    // Store current result path for log viewer
-                    window.currentResultPath = urlPath;
-
-                    resultLinks.style.display = "block";
-                  }
-                } else if (data.type === "done") {
-                  statusBadge.className =
-                    data.code.code === 0
-                      ? "badge bg-success"
-                      : "badge bg-danger";
-                  statusBadge.textContent =
-                    data.code.code === 0 ? "Completed" : "Failed";
-                }
+                handleStreamData(data);
               }
             });
           }
@@ -892,6 +1040,41 @@
           content.textContent = await res.text();
         } catch (e) {
           content.textContent = "Error loading log: " + e.message;
+        }
+      }
+
+      async function reconnectStream() {
+        const consoleDiv = document.getElementById("console");
+        const runBtn = document.getElementById("runBtn");
+        const stopBtn = document.getElementById("stopBtn");
+
+        // Initialize Live Charts
+        initLiveCharts();
+
+        try {
+          const response = await fetch("/stream");
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
+
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+                handleStreamData(data);
+              }
+            });
+          }
+        } catch (e) {
+          consoleDiv.innerHTML += `<p class="console-err">Error reconnecting: ${e.message}</p>`;
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Pipeline";
+          stopBtn.disabled = true;
         }
       }
 
@@ -1569,15 +1752,17 @@ output_dir: "./results"
               const runBtn = document.getElementById("runBtn");
               const stopBtn = document.getElementById("stopBtn");
               const statusBadge = document.getElementById("statusBadge");
-              
+
               runBtn.disabled = true;
               runBtn.textContent = "Running (Reconnected)...";
               stopBtn.disabled = false;
               statusBadge.className = "badge bg-warning text-dark";
               statusBadge.textContent = "Running";
-              
+
               // Ideally we would reconnect to the stream here, but for now we just show status
-              document.getElementById("console").innerHTML += "<p class='console-line text-warning'>[INFO] Test is currently running in background. Logs may not be fully synchronized after refresh.</p>";
+              document.getElementById("console").innerHTML =
+                "<p class='console-line text-warning'>[INFO] Reconnecting to active session...</p>";
+              reconnectStream();
             }
           }
         } catch (e) {

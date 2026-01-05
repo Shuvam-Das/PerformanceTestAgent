@@ -10,12 +10,14 @@ import yaml
 import shutil
 import psutil
 import webbrowser
+import threading
 from threading import Timer
 
 app = Flask(__name__)
 
 current_process = None
 server_state = {'is_running': False}
+log_history = []
 
 @app.route('/')
 def index():
@@ -26,10 +28,35 @@ def results(filename):
     results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
     return send_from_directory(results_dir, filename)
 
+def process_monitor(proc, temp_file):
+    global server_state, log_history
+    
+    # Read output
+    for line in iter(proc.stdout.readline, ''):
+        if not line: break
+        print(f"[SERVER DEBUG] {line.rstrip()}") # Debug to verify data flow
+        msg = {'type': 'stdout', 'message': line.rstrip()}
+        log_history.append(msg)
+        
+    proc.wait()
+    
+    # Cleanup
+    if temp_file and os.path.exists(temp_file):
+        os.remove(temp_file)
+        
+    done_msg = {'type': 'done', 'code': {'code': proc.returncode}}
+    log_history.append(done_msg)
+    server_state['is_running'] = False
+
 @app.route('/run', methods=['POST'])
 def run():
     global current_process
     global server_state
+    global log_history
+    
+    if server_state['is_running']:
+        return jsonify({'error': 'Test already running'}), 409
+
     data = request.json
     mode = data.get('mode')
     jira = data.get('jira', {})
@@ -42,84 +69,102 @@ def run():
     cleanup_threshold = data.get('cleanupThreshold')
     parallel = data.get('parallel')
 
+    # Reset history
+    log_history = []
+
+    # Use the current python executable to run the agent
+    cmd = [sys.executable, '-u', 'agent.py'] # -u for unbuffered output
+    temp_file = None
+
+    if mode == 'jira':
+        cmd.extend([
+            '--jira_url', jira.get('base_url', ''),
+            '--jira_key', jira.get('issue_key', ''),
+            '--jira_auth', jira.get('auth', '')
+        ])
+    else:
+        temp_file = f"temp_input_{int(time.time())}.json"
+        # Write temp file
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            if isinstance(file_content, str):
+                f.write(file_content)
+            else:
+                json.dump(file_content, f, indent=2)
+        cmd.extend(['--file', temp_file])
+
+    if dry_run:
+        cmd.append('--dry-run')
+
+    if verbose:
+        cmd.append('--verbose')
+
+    if clean:
+        cmd.append('--clean')
+
+    if config_profile:
+        cmd.extend(['--config', config_profile])
+
+    if webhook_url:
+        cmd.extend(['--notify', webhook_url])
+
+    if cleanup_threshold:
+        cmd.extend(['--cleanup-threshold', str(cleanup_threshold)])
+
+    if parallel:
+        cmd.extend(['--parallel', str(parallel)])
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
+
+    # Run agent as subprocess
+    # Merge stderr into stdout to simplify streaming
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding='utf-8',
+        errors='replace',
+        env=env,
+        bufsize=1, # Line buffered
+        universal_newlines=True
+    )
+    current_process = proc
     server_state['is_running'] = True
 
-    def generate():
-        # Use the current python executable to run the agent
-        cmd = [sys.executable, '-u', 'agent.py'] # -u for unbuffered output
-        temp_file = None
+    # Start monitor thread
+    t = threading.Thread(target=process_monitor, args=(proc, temp_file))
+    t.daemon = True
+    t.start()
 
-        if mode == 'jira':
-            cmd.extend([
-                '--jira_url', jira.get('base_url', ''),
-                '--jira_key', jira.get('issue_key', ''),
-                '--jira_auth', jira.get('auth', '')
-            ])
+    return Response(stream_logs(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no' # Disable Nginx buffering if present
+    })
+
+def stream_logs():
+    curr = 0
+    while True:
+        if curr < len(log_history):
+            yield f"data: {json.dumps(log_history[curr])}\n\n"
+            curr += 1
+        elif not server_state['is_running']:
+            # Check one last time for any remaining logs after process finished
+            if curr < len(log_history):
+                continue
+            break
         else:
-            temp_file = f"temp_input_{int(time.time())}.json"
-            # Write temp file
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                if isinstance(file_content, str):
-                    f.write(file_content)
-                else:
-                    json.dump(file_content, f, indent=2)
-            cmd.extend(['--file', temp_file])
+            time.sleep(0.1)
 
-        if dry_run:
-            cmd.append('--dry-run')
-
-        if verbose:
-            cmd.append('--verbose')
-
-        if clean:
-            cmd.append('--clean')
-
-        if config_profile:
-            cmd.extend(['--config', config_profile])
-
-        if webhook_url:
-            cmd.extend(['--notify', webhook_url])
-
-        if cleanup_threshold:
-            cmd.extend(['--cleanup-threshold', str(cleanup_threshold)])
-
-        if parallel:
-            cmd.extend(['--parallel', str(parallel)])
-
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUNBUFFERED"] = "1"
-
-        # Run agent as subprocess
-        # Merge stderr into stdout to simplify streaming
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            env=env,
-            bufsize=1, # Line buffered
-            universal_newlines=True
-        )
-        current_process = proc
-
-        # Stream output
-        for line in proc.stdout:
-            yield f"data: {json.dumps({'type': 'stdout', 'message': line.rstrip()})}\n\n"
-        
-        proc.wait()
-        current_process = None
-        server_state['is_running'] = False
-
-        # Cleanup
-        if temp_file and os.path.exists(temp_file):
-            os.remove(temp_file)
-
-        yield f"data: {json.dumps({'type': 'done', 'code': {'code': proc.returncode}})}\n\n"
-
-    return Response(generate(), mimetype='text/event-stream')
+@app.route('/stream', methods=['GET'])
+def stream_endpoint():
+    return Response(stream_logs(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+    })
 
 @app.route('/stop', methods=['POST'])
 def stop():

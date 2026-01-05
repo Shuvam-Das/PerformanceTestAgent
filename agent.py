@@ -7,6 +7,7 @@ import shutil
 import yaml
 import requests
 import threading
+import math
 from datetime import datetime
 
 from parser import parse_input
@@ -210,8 +211,24 @@ class GeneratorAgent:
         print("[STATUS] Stage: k6 Script Generation", flush=True)
         script_content = generate_k6_script(context.inputs)
         context.log_verbose(f"Generated script size: {len(script_content)} bytes")
-        context.script_path = os.path.join(context.result_dir, 'script.js')
-        with open(context.script_path, 'w') as f:
+
+        # Create a dedicated scripts folder
+        scripts_dir = os.path.join(context.result_dir, 'scripts')
+        os.makedirs(scripts_dir, exist_ok=True)
+
+        # Generate a more descriptive script name
+        input_source = ""
+        if context.args.file:
+            input_source = os.path.basename(context.args.file)
+        elif context.args.jira_key:
+            input_source = context.args.jira_key
+
+        script_name = "script.js"
+        if input_source:
+            script_name = f"{os.path.splitext(input_source)[0]}.js"
+
+        context.script_path = os.path.join(scripts_dir, script_name)
+        with open(context.script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
 
 class ValidationAgent:
@@ -270,6 +287,8 @@ class ExecutionAgent:
                 print(f"[STATUS] Parallel Execution: Spawning {context.args.parallel} Docker containers", flush=True)
                 procs = []
                 abs_result_dir = os.path.abspath(context.result_dir)
+                # Get the script path relative to the result directory for Docker volume mapping
+                relative_script_path = os.path.relpath(context.script_path, context.result_dir).replace('\\', '/')
                 
                 for i in range(context.args.parallel):
                     # Calculate execution segment (e.g., 0:0.5, 0.5:1)
@@ -290,12 +309,12 @@ class ExecutionAgent:
                         "--execution-segment", segment,
                         "--out", f"json=/results/{results_file}",
                         "--summary-export", f"/results/{summary_file}",
-                        "/results/script.js"
+                        f"/results/{relative_script_path}"
                     ]
                     
                     context.log_verbose(f"Starting container {i}: {' '.join(cmd)}")
                     # Start process, redirect stderr to stdout for unified monitoring
-                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
                 
             else:
                 # Local sequential execution
@@ -325,6 +344,12 @@ class MonitoringAgent:
         self.error_rate_threshold = None
         self.lock = threading.Lock()
         self.last_alert_check_reqs = 0
+        self.latency_window = []
+        self.last_stats_print = time.time()
+        self.interval_reqs = 0
+        self.interval_errors = 0
+        self.interval_bytes_recv = 0
+        self.interval_bytes_sent = 0
 
     def run(self, context: PipelineContext):
         if not context.running_processes:
@@ -400,10 +425,10 @@ class MonitoringAgent:
                         metric = data.get('metric')
                         value = data.get('data', {}).get('value')
 
-                        if data.get('type') == 'Point' and metric in ['http_req_duration', 'http_reqs', 'vus', 'http_req_failed']:
+                        if data.get('type') == 'Point' and metric in ['http_req_duration', 'http_reqs', 'vus', 'http_req_failed', 'data_received', 'data_sent']:
                             print(f"[METRIC] {json.dumps(data)}", flush=True)
 
-                            if metric in ['http_reqs', 'http_req_failed']:
+                            if metric in ['http_reqs', 'http_req_failed', 'data_received', 'data_sent']:
                                 with self.lock:
                                     if metric == 'http_reqs':
                                         self.total_reqs += 1
@@ -418,6 +443,65 @@ class MonitoringAgent:
                                             current_rate = self.failed_reqs / self.total_reqs
                                             if current_rate > self.error_rate_threshold:
                                                 print(f"[CRITICAL] High error rate detected! Current: {current_rate:.2%}, Threshold: {self.error_rate_threshold:.2%}", flush=True)
+                                    
+                                    # Interval stats accumulators
+                                    if metric == 'http_reqs':
+                                        self.interval_reqs += 1
+                                    elif metric == 'http_req_failed' and value > 0:
+                                        self.interval_errors += 1
+                                    elif metric == 'data_received':
+                                        self.interval_bytes_recv += value
+                                    elif metric == 'data_sent':
+                                        self.interval_bytes_sent += value
+                            
+                            if metric == 'http_req_duration':
+                                with self.lock:
+                                    self.latency_window.append(value)
+                                    # Keep window manageable
+                                    if len(self.latency_window) > 1000:
+                                        self.latency_window.pop(0)
+
+                            # Periodic Stats Print (every 3 seconds)
+                            now = time.time()
+                            if now - self.last_stats_print > 3:
+                                with self.lock:
+                                    duration = now - self.last_stats_print
+                                    self.last_stats_print = now
+                                    
+                                    # Latency Stats
+                                    count = len(self.latency_window)
+                                    avg = 0
+                                    median = 0
+                                    p90 = 0
+                                    p95 = 0
+                                    p99 = 0
+                                    mn = 0
+                                    mx = 0
+                                    std_dev = 0
+                                    
+                                    if count > 0:
+                                        sorted_lat = sorted(self.latency_window)
+                                        avg = sum(sorted_lat) / count
+                                        median = sorted_lat[int(count * 0.5)]
+                                        p90 = sorted_lat[int(count * 0.90)]
+                                        p95 = sorted_lat[int(count * 0.95)]
+                                        p99 = sorted_lat[int(count * 0.99)]
+                                        mn = sorted_lat[0]
+                                        mx = sorted_lat[-1]
+                                        variance = sum([((x - avg) ** 2) for x in sorted_lat]) / count
+                                        std_dev = math.sqrt(variance)
+                                    
+                                    # Throughput & Network
+                                    rps = self.interval_reqs / duration
+                                    err_pct = (self.interval_errors / self.interval_reqs * 100) if self.interval_reqs > 0 else 0.0
+                                    kb_recv = (self.interval_bytes_recv / 1024) / duration
+                                    kb_sent = (self.interval_bytes_sent / 1024) / duration
+                                    
+                                    # Reset interval counters
+                                    self.interval_reqs = 0; self.interval_errors = 0; self.interval_bytes_recv = 0; self.interval_bytes_sent = 0
+
+                                    print(f"[STATS] Samples: {self.total_reqs} | RPS: {rps:.1f} | Err: {err_pct:.1f}% | Lat(ms) [Avg:{avg:.0f} Med:{median:.0f} 90%:{p90:.0f} 95%:{p95:.0f} 99%:{p99:.0f} Min:{mn:.0f} Max:{mx:.0f} Sd:{std_dev:.0f}] | Net(KB/s) [In:{kb_recv:.1f} Out:{kb_sent:.1f}]", flush=True)
+
                     except:
                         pass
                 else:
@@ -426,7 +510,7 @@ class MonitoringAgent:
             for line in f:
                 try:
                     data = json.loads(line)
-                    if data.get('type') == 'Point' and data.get('metric') in ['http_req_duration', 'http_reqs', 'vus', 'http_req_failed']:
+                    if data.get('type') == 'Point' and data.get('metric') in ['http_req_duration', 'http_reqs', 'vus', 'http_req_failed', 'data_received', 'data_sent']:
                         print(f"[METRIC] {json.dumps(data)}", flush=True)
                 except:
                     pass
@@ -607,6 +691,7 @@ class CleanupAgent:
                     break
 
 def main():
+    print("[STATUS] Agent initialized and starting...", flush=True)
     parser = argparse.ArgumentParser(description="Performance Test Agent")
     parser.add_argument('--jira_key', type=str)
     parser.add_argument('--jira_url', type=str)

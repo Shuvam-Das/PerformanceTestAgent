@@ -9,8 +9,9 @@ def generate_k6_script(inputs):
 
     script = []
     script.append("import http from 'k6/http';")
-    script.append("import { check, sleep } from 'k6';")
-    script.append("import { Trend, Counter } from 'k6/metrics';\n")
+    script.append("import { check, sleep, group } from 'k6';")
+    script.append("import { Trend, Counter } from 'k6/metrics';")
+    script.append("const errorRate = new Counter('errors');\n")
 
     script.append("export const options = {")
     
@@ -76,12 +77,13 @@ def generate_k6_script(inputs):
             headers_str = json.dumps(resolved_headers)
             body_str = json.dumps(resolved_body) if resolved_body else 'null'
 
-            script.append("  {")
-            script.append(f"    let params = {{ headers: {headers_str} }};")
+            script.append(f"  group('{ep.get('name', ep['url'])}', function() {{")
+            script.append(f"    let params = {{ headers: {headers_str}, tags: {{ name: '{ep.get('name', 'Unnamed Request')}' }} }};")
             script.append(f"    let res = http.{method}(`{url}`, {body_str}, params);")
-            script.append("    check(res, { 'status is 2xx': (r) => r.status >= 200 && r.status < 300 });")
+            script.append("    const checkRes = check(res, { 'status is 2xx': (r) => r.status >= 200 && r.status < 300 });")
+            script.append("    if (!checkRes) { errorRate.add(1); }")
             script.append("    sleep(1);")
-            script.append("  }")
+            script.append("  });")
     else:
         script.append("  // TODO: Logic for OpenAPI/Postman collection execution.")
     
