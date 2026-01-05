@@ -360,8 +360,8 @@ PLACEHOLDERS
 
 To run the agent with a web interface:
 
-1. Install dependencies: `npm install`
-2. Start the server: `npm run gui`
+1. Install dependencies: `pip install -r requirements.txt`
+2. Start the server: `python server.py`
 3. Open browser at: `http://localhost:3000`
 4. Use the "Local File" tab to paste JSON inputs or "Jira Story" tab to fetch requirements remotely.
 

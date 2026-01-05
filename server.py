@@ -9,13 +9,13 @@ import zipfile
 import yaml
 import shutil
 
-app = Flask(__name__, static_folder='public', static_url_path='')
+app = Flask(__name__)
 
 current_process = None
 
 @app.route('/')
 def index():
-    return send_from_directory('public', 'index.html')
+    return send_from_directory('.', 'index.html')
 
 @app.route('/results/<path:filename>')
 def results(filename):
