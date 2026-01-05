@@ -30,7 +30,7 @@ def compare_results(folder1, folder2):
                 sys.exit(1)
         
         try:
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             print(f"[ERROR] Failed to load summary from {path}: {e}")
@@ -72,7 +72,7 @@ def compare_results(folder1, folder2):
 
     output_path = "comparison_report.md"
     try:
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             f.write(report)
         print(f"\n[STATUS] Comparison report saved to {output_path}")
     except Exception as e:
@@ -125,7 +125,7 @@ class IngestionAgent:
         config_defaults = {}
         if os.path.exists(config_file):
             try:
-                with open(config_file, 'r') as f:
+                with open(config_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                     expanded_content = os.path.expandvars(content)
                     config_defaults = yaml.safe_load(expanded_content) or {}
@@ -194,7 +194,7 @@ class IngestionAgent:
 
         context.log_verbose(f"Parsed Input Keys: {list(context.inputs.keys()) if context.inputs else 'None'}")
 
-        with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'w') as f:
+        with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'w', encoding='utf-8') as f:
             json.dump(context.inputs, f, indent=2)
 
         # API Collection Validation
@@ -211,7 +211,7 @@ class GeneratorAgent:
         script_content = generate_k6_script(context.inputs)
         context.log_verbose(f"Generated script size: {len(script_content)} bytes")
         context.script_path = os.path.join(context.result_dir, 'script.js')
-        with open(context.script_path, 'w') as f:
+        with open(context.script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
 
 class ValidationAgent:
@@ -219,14 +219,14 @@ class ValidationAgent:
         print("[STATUS] Stage: Script Validation")
         # ESLint
         try:
-            cmd = f'npx eslint "{context.script_path}"'
+            cmd = ['npx', 'eslint', context.script_path]
             context.log_verbose(f"Executing: {cmd}")
-            lint_res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
             if lint_res.returncode != 0:
                 print("Unable to understand requirements")
                 print("Diagnostics: Generated script failed linting.")
                 print(lint_res.stdout)
-                with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w') as f:
+                with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
                     f.write(lint_res.stdout)
                 sys.exit(1)
         except Exception as e:
@@ -234,10 +234,10 @@ class ValidationAgent:
 
         # Smoke Run
         print("[STATUS] Stage: Smoke Run")
-        cmd = f'k6 run --vus 1 --duration 1s "{context.script_path}"'
+        cmd = ['k6', 'run', '--vus', '1', '--duration', '1s', context.script_path]
         context.log_verbose(f"Executing: {cmd}")
-        smoke_res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w') as f:
+        smoke_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
+        with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w', encoding='utf-8') as f:
             f.write(smoke_res.stdout + smoke_res.stderr)
         
         if smoke_res.returncode != 0:
@@ -295,59 +295,24 @@ class ExecutionAgent:
                     
                     context.log_verbose(f"Starting container {i}: {' '.join(cmd)}")
                     # Start process, redirect stderr to stdout for unified monitoring
-                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
                 
             else:
                 # Local sequential execution
-                cmd = f'k6 run --out json="{context.summary_path}" --summary-export="{context.summary_export_path}" "{context.script_path}"'
+                cmd = [
+                    'k6', 'run',
+                    '--out', f"json={context.summary_path}",
+                    '--summary-export', context.summary_export_path,
+                    context.script_path
+                ]
                 context.result_files.append(context.summary_path)
                 context.log_verbose(f"Executing: {cmd}")
                 # Start process
-                context.running_processes.append(subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+                context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
         else:
             print("[STATUS] Dry Run: Skipping full test execution.")
-            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
+            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w', encoding='utf-8') as f:
                 json.dump({"status": "skipped", "reason": "dry-run"}, f, indent=2)
-
-    def merge_summaries(self, result_dir, count, output_path):
-        merged = None
-        for i in range(count):
-            path = os.path.join(result_dir, f"summary_export_{i}.json")
-            if not os.path.exists(path): continue
-            
-            with open(path, 'r') as f:
-                data = json.load(f)
-            
-            if merged is None:
-                merged = data
-                continue
-            
-            # Merge logic for SLA metrics
-            if 'metrics' in data:
-                # http_req_duration: take max of p(95) for safety
-                if 'http_req_duration' in data['metrics']:
-                    m_val = merged['metrics']['http_req_duration']['values']
-                    d_val = data['metrics']['http_req_duration']['values']
-                    m_val['p(95)'] = max(m_val.get('p(95)', 0), d_val.get('p(95)', 0))
-                
-                # http_req_failed: aggregate counts and recalculate rate
-                if 'http_req_failed' in data['metrics']:
-                    m_val = merged['metrics']['http_req_failed']['values']
-                    d_val = data['metrics']['http_req_failed']['values']
-                    m_val['passes'] += d_val.get('passes', 0)
-                    m_val['fails'] += d_val.get('fails', 0)
-                    total = m_val['passes'] + m_val['fails']
-                    m_val['rate'] = m_val['passes'] / total if total > 0 else 0
-                
-                # http_reqs: sum counts and rates
-                if 'http_reqs' in data['metrics']:
-                    m_val = merged['metrics']['http_reqs']['values']
-                    d_val = data['metrics']['http_reqs']['values']
-                    m_val['count'] += d_val.get('count', 0)
-                    m_val['rate'] += d_val.get('rate', 0)
-
-        with open(output_path, 'w') as f:
-            json.dump(merged, f, indent=2)
 
 class MonitoringAgent:
     def __init__(self):
@@ -422,7 +387,7 @@ class MonitoringAgent:
         
         if not os.path.exists(file_path): return
 
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             while not stop_event.is_set():
                 line = f.readline()
                 if line:
@@ -468,7 +433,7 @@ class MonitoringAgent:
             path = os.path.join(result_dir, f"summary_export_{i}.json")
             if not os.path.exists(path): continue
             
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             if merged is None:
@@ -495,7 +460,7 @@ class MonitoringAgent:
                     m_val['count'] += d_val.get('count', 0)
                     m_val['rate'] += d_val.get('rate', 0)
 
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(merged, f, indent=2)
 
 class AnalysisAgent:
@@ -504,7 +469,7 @@ class AnalysisAgent:
             print("[STATUS] Stage: SLA Evaluation")
             metrics = {}
             try:
-                with open(context.summary_export_path, 'r') as f:
+                with open(context.summary_export_path, 'r', encoding='utf-8') as f:
                     metrics = json.load(f)
             except Exception as e:
                 print("[ERROR] Failed to read test summary.")
@@ -512,7 +477,7 @@ class AnalysisAgent:
             context.log_verbose(f"Evaluating SLA against metrics: {list(metrics.get('metrics', {}).keys())}")
             context.sla_results = evaluate_sla(metrics, context.inputs['sla'])
             context.log_verbose(f"SLA Results: {json.dumps(context.sla_results, indent=2)}")
-            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
+            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w', encoding='utf-8') as f:
                 json.dump(context.sla_results, f, indent=2)
 
             # Generate PDF Report
@@ -555,7 +520,7 @@ class AnalysisAgent:
 - Results
 - PDF Report
 """
-        with open(os.path.join(context.result_dir, 'summary.md'), 'w') as f:
+        with open(os.path.join(context.result_dir, 'summary.md'), 'w', encoding='utf-8') as f:
             f.write(context.summary_md)
 
         print("[STATUS] Pipeline Complete.")

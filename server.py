@@ -50,7 +50,7 @@ def run():
         else:
             temp_file = f"temp_input_{int(time.time())}.json"
             # Write temp file
-            with open(temp_file, 'w') as f:
+            with open(temp_file, 'w', encoding='utf-8') as f:
                 if isinstance(file_content, str):
                     f.write(file_content)
                 else:
@@ -215,7 +215,7 @@ def save_config():
         if jira.get('auth'): config['jira_auth'] = jira['auth']
 
     try:
-        with open('config.yaml', 'w') as f:
+        with open('config.yaml', 'w', encoding='utf-8') as f:
             yaml.dump(config, f, default_flow_style=False)
         return jsonify({'status': 'success', 'message': 'Configuration saved to config.yaml'})
     except Exception as e:
@@ -226,7 +226,7 @@ def get_config():
     if not os.path.exists('config.yaml'):
         return jsonify({})
     try:
-        with open('config.yaml', 'r') as f:
+        with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f) or {}
         return jsonify(config)
     except Exception as e:
@@ -253,7 +253,7 @@ def get_config_raw():
     if not os.path.exists(filename):
         return jsonify({'content': ''})
     try:
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             return jsonify({'content': f.read()})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -268,7 +268,7 @@ def save_config_raw():
         return jsonify({'error': 'Invalid filename'}), 400
 
     try:
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(content)
         return jsonify({'status': 'success', 'message': f'Configuration saved to {filename}'})
     except Exception as e:

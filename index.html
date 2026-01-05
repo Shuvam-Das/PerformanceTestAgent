@@ -10,6 +10,7 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
       body {
         background-color: #f8f9fa;
@@ -421,11 +422,11 @@
             ></button>
           </div>
           <div class="modal-body">
-            <pre
+            <div
               id="comparisonOutput"
               class="p-3 bg-light border rounded"
-              style="white-space: pre-wrap; font-family: monospace"
-            ></pre>
+              style="white-space: pre-wrap"
+            ></div>
           </div>
         </div>
       </div>
@@ -1001,6 +1002,7 @@
         const modalEl = document.getElementById("comparisonModal");
         const modal = new bootstrap.Modal(modalEl);
         const output = document.getElementById("comparisonOutput");
+        let rawMarkdown = "";
         output.textContent = "Comparing...";
         modal.show();
 
@@ -1029,11 +1031,13 @@
               if (event.startsWith("data: ")) {
                 const data = JSON.parse(event.replace("data: ", ""));
                 if (data.type === "stdout") {
-                  output.textContent += data.message + "\n";
+                  rawMarkdown += data.message + "\n";
+                  output.innerHTML = marked.parse(rawMarkdown);
                 }
               }
             });
           }
+          output.innerHTML = marked.parse(rawMarkdown);
         } catch (e) {
           output.textContent += `\nError: ${e.message}`;
         }

@@ -14,7 +14,7 @@ def generate_charts(json_path, output_dir):
     rps_buckets = {}
     
     try:
-        with open(json_path, 'r') as f:
+        with open(json_path, 'r', encoding='utf-8') as f:
             start_time = None
             for line in f:
                 if not line.strip(): continue

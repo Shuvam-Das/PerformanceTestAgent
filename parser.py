@@ -17,7 +17,7 @@ def parse_input(config):
                 headers['Authorization'] = jira['auth']
             
             url = f"{jira['base_url']}/rest/api/2/issue/{jira['issue_key']}"
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             content = response.json().get('fields', {}).get('description', "")
         except Exception as e:
