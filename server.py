@@ -12,7 +12,11 @@ import psutil
 import webbrowser
 import threading
 from threading import Timer
-import google.generativeai as genai
+try:
+    from google import genai
+except ImportError:
+    genai = None
+    print("[WARN] 'google-genai' library not found. Chat features will be limited.")
 
 app = Flask(__name__)
 
@@ -283,11 +287,22 @@ def save_config():
     data = request.json
     config = {}
     
+    # Load existing config to preserve other values
+    if os.path.exists('config.yaml'):
+        try:
+            with open('config.yaml', 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+        except:
+            pass
+    
     if data.get('jira'):
         jira = data['jira']
         if jira.get('base_url'): config['jira_url'] = jira['base_url']
         if jira.get('issue_key'): config['jira_key'] = jira['issue_key']
         if jira.get('auth'): config['jira_auth'] = jira['auth']
+    
+    if data.get('gemini_api_key'):
+        config['gemini_api_key'] = data['gemini_api_key']
 
     try:
         with open('config.yaml', 'w', encoding='utf-8') as f:
@@ -374,13 +389,35 @@ def chat():
     message = data.get('message')
     context_logs = data.get('context', '')
     
+    if genai is None:
+        response_text = "I'm currently in basic mode because the 'google-genai' library is not installed. Please run `pip install google-genai` to enable intelligent assistance.\n\n"
+        if message and ("error" in message.lower() or "fail" in message.lower()):
+             response_text += "It looks like you're encountering an error. Please check the Console tab for detailed diagnostics."
+        else:
+             response_text += "I can help you run tests if you provide a valid configuration."
+        return jsonify({'response': response_text})
+    
     api_key = os.environ.get('GEMINI_API_KEY')
+    if api_key:
+        api_key = api_key.strip()
+
     if not api_key:
-        return jsonify({'response': "I'm sorry, but I can't provide intelligent assistance right now because the GEMINI_API_KEY environment variable is not set. Please set it and restart the server."})
+        # Try loading from config.yaml
+        if os.path.exists('config.yaml'):
+            try:
+                with open('config.yaml', 'r', encoding='utf-8') as f:
+                    conf = yaml.safe_load(f) or {}
+                    api_key = conf.get('gemini_api_key')
+                    if api_key:
+                        api_key = api_key.strip()
+            except:
+                pass
+    
+    if not api_key:
+        return jsonify({'response': "I'm sorry, but I can't provide intelligent assistance right now because the GEMINI_API_KEY is not set. Please set it in the configuration panel or as an environment variable."})
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        client = genai.Client(api_key=api_key)
         
         prompt = f"""
         You are a helpful AI assistant for a Performance Test Agent tool. 
@@ -392,7 +429,7 @@ def chat():
         
         Please provide a concise and helpful answer.
         """
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
         return jsonify({'response': response.text})
     except Exception as e:
         return jsonify({'response': f"I encountered an error while trying to think: {str(e)}"})
@@ -401,5 +438,10 @@ def open_browser():
     webbrowser.open_new_tab("http://127.0.0.1:3000")
 
 if __name__ == '__main__':
+    print("Starting server at http://localhost:3000")
+    if genai:
+        print("[INFO] Chat features enabled (google-genai found).")
+    else:
+        print("[INFO] Chat features limited (google-genai not found).")
     Timer(1, open_browser).start()
     app.run(host='0.0.0.0', port=3000)

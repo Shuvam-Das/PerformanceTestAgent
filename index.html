@@ -119,7 +119,7 @@
         position: fixed;
         bottom: 20px;
         right: 20px;
-        z-index: 1000;
+        z-index: 2000;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
@@ -334,6 +334,16 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div class="mt-3 mb-3 border-top pt-3">
+                <label class="form-label">Gemini API Key (Optional)</label>
+                <input
+                  type="password"
+                  class="form-control"
+                  id="geminiKey"
+                  placeholder="Enter key to enable AI Chat"
+                />
               </div>
               <div class="form-check mt-3">
                 <input class="form-check-input" type="checkbox" id="dryRun" />
@@ -615,11 +625,20 @@
       <div class="chat-window" id="chatWindow">
         <div class="chat-header">
           <span>🤖 Agent Assistant</span>
-          <button
-            type="button"
-            class="btn-close btn-close-white"
-            onclick="toggleChat()"
-          ></button>
+          <div class="d-flex align-items-center">
+            <button
+              class="btn btn-sm btn-outline-light py-0 px-2 me-2"
+              style="font-size: 0.75rem"
+              onclick="clearChat()"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              onclick="toggleChat()"
+            ></button>
+          </div>
         </div>
         <div class="chat-body" id="chatHistory">
           <div class="d-flex flex-column align-items-start mb-2">
@@ -891,574 +910,587 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-            // Clear Button Handler
-            document
-              .getElementById("clearBtn")
-              .addEventListener("click", function () {
-                document.getElementById("fileUpload").value = "";
-                document.getElementById("fileContent").value = "";
-              });
+      // Clear Button Handler
+      document
+        .getElementById("clearBtn")
+        .addEventListener("click", function () {
+          document.getElementById("fileUpload").value = "";
+          document.getElementById("fileContent").value = "";
+        });
 
-            // File Upload Handler
-            document
-              .getElementById("fileUpload")
-              .addEventListener("change", function (e) {
-                const file = e.target.files[0];
-                if (!file) return;
+      // File Upload Handler
+      document
+        .getElementById("fileUpload")
+        .addEventListener("change", function (e) {
+          const file = e.target.files[0];
+          if (!file) return;
 
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                  document.getElementById("fileContent").value = e.target.result;
-                };
-                reader.readAsText(file);
-              });
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            document.getElementById("fileContent").value = e.target.result;
+          };
+          reader.readAsText(file);
+        });
 
-            function toggleChat() {
-              const window = document.getElementById("chatWindow");
-              if (window.style.display === "none" || window.style.display === "") {
-                window.style.display = "flex";
-                document.getElementById("chatInput").focus();
-              } else {
-                window.style.display = "none";
-              }
-            }
+      function toggleChat() {
+        const chatWin = document.getElementById("chatWindow");
+        if (chatWin.style.display === "none" || chatWin.style.display === "") {
+          chatWin.style.display = "flex";
+          const input = document.getElementById("chatInput");
+          if (input) input.focus();
+        } else {
+          chatWin.style.display = "none";
+        }
+      }
 
-            let autoScroll = true;
+      function clearChat() {
+        const history = document.getElementById("chatHistory");
+        history.innerHTML = `
+                <div class="d-flex flex-column align-items-start mb-2">
+                  <div class="bg-primary text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">
+                    Hello! I'm your Performance Test Agent. How can I help you today?
+                  </div>
+                </div>`;
+      }
 
-            function toggleAutoScroll() {
-              autoScroll = !autoScroll;
-              const btn = document.getElementById("btnAutoScroll");
-              if (autoScroll) btn.classList.add("active");
-              else btn.classList.remove("active");
-            }
+      let autoScroll = true;
 
-            function clearConsole() {
-              document.getElementById("console").innerHTML = "";
-            }
+      function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        const btn = document.getElementById("btnAutoScroll");
+        if (autoScroll) btn.classList.add("active");
+        else btn.classList.remove("active");
+      }
 
-            function copyConsole() {
-              const text = document.getElementById("console").innerText;
-              navigator.clipboard.writeText(text).then(() => {
-                // Optional: visual feedback
-              });
-            }
+      function clearConsole() {
+        document.getElementById("console").innerHTML = "";
+      }
 
-            function downloadConsole() {
-              const text = document.getElementById("console").innerText;
-              const blob = new Blob([text], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-              a.download = `console_log_${timestamp}.txt`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-            }
+      function copyConsole() {
+        const text = document.getElementById("console").innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          // Optional: visual feedback
+        });
+      }
 
-            function escapeHtml(text) {
-              if (!text) return text;
-              return text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-            }
+      function downloadConsole() {
+        const text = document.getElementById("console").innerText;
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        a.download = `console_log_${timestamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
 
-            function handleStreamData(data) {
-              const consoleDiv = document.getElementById("console");
-              const resultLinks = document.getElementById("resultLinks");
-              const statusBadge = document.getElementById("statusBadge");
-              const runBtn = document.getElementById("runBtn");
-              const stopBtn = document.getElementById("stopBtn");
+      function escapeHtml(text) {
+        if (!text) return text;
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
 
-              if (data.type === "stdout" || data.type === "stderr") {
-                if (data.message.startsWith("[METRIC] ")) {
-                  updateLiveCharts(data.message.substring(9));
-                  return;
-                }
+      function handleStreamData(data) {
+        const consoleDiv = document.getElementById("console");
+        const resultLinks = document.getElementById("resultLinks");
+        const statusBadge = document.getElementById("statusBadge");
+        const runBtn = document.getElementById("runBtn");
+        const stopBtn = document.getElementById("stopBtn");
 
-                const div = document.createElement("div");
+        if (data.type === "stdout" || data.type === "stderr") {
+          if (data.message.startsWith("[METRIC] ")) {
+            updateLiveCharts(data.message.substring(9));
+            return;
+          }
 
-                let levelClass = "log-default";
-                if (
-                  data.type === "stderr" ||
-                  data.message.includes("[ERROR]") ||
-                  data.message.includes("Error:")
-                )
-                  levelClass = "log-error";
-                else if (data.message.includes("[WARN]")) levelClass = "log-warn";
-                else if (
-                  data.message.includes("[INFO]") ||
-                  data.message.includes("[STATUS]")
-                )
-                  levelClass = "log-info";
-                else if (
-                  data.message.includes("[VERBOSE]") ||
-                  data.message.includes("[DEBUG]")
-                )
-                  levelClass = "log-debug";
-                else if (data.message.includes("[SUCCESS]"))
-                  levelClass = "log-success";
+          const div = document.createElement("div");
 
-                div.className = `console-line ${levelClass}`;
+          let levelClass = "log-default";
+          if (
+            data.type === "stderr" ||
+            data.message.includes("[ERROR]") ||
+            data.message.includes("Error:")
+          )
+            levelClass = "log-error";
+          else if (data.message.includes("[WARN]")) levelClass = "log-warn";
+          else if (
+            data.message.includes("[INFO]") ||
+            data.message.includes("[STATUS]")
+          )
+            levelClass = "log-info";
+          else if (
+            data.message.includes("[VERBOSE]") ||
+            data.message.includes("[DEBUG]")
+          )
+            levelClass = "log-debug";
+          else if (data.message.includes("[SUCCESS]"))
+            levelClass = "log-success";
 
-                const time = new Date().toLocaleTimeString("en-US", {
-                  hour12: false,
-                });
-                div.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-msg">${escapeHtml(
-                  data.message
-                )}</span>`;
+          div.className = `console-line ${levelClass}`;
 
-                consoleDiv.appendChild(div);
-                if (autoScroll) consoleDiv.scrollTop = consoleDiv.scrollHeight;
+          const time = new Date().toLocaleTimeString("en-US", {
+            hour12: false,
+          });
+          div.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-msg">${escapeHtml(
+            data.message
+          )}</span>`;
 
-                // Detect Results Path for linking
-                if (data.message.includes("[STATUS] Starting Agent. Results:")) {
-                  const path = data.message.split("Results: ")[1].trim();
-                  const urlPath = path.replace(/\\/g, "/").replace(/^\.\//, "");
-                  document.getElementById(
-                    "summaryLink"
-                  ).href = `/${urlPath}/summary.md`;
-                  document.getElementById(
-                    "resultsLink"
-                  ).href = `/${urlPath}/test_results.json`;
-                  document.getElementById("pdfLink").href = `/${urlPath}/report.pdf`;
-                  window.currentResultPath = urlPath;
-                  resultLinks.style.display = "block";
-                }
-              } else if (data.type === "done") {
-                statusBadge.className =
-                  data.code.code === 0 ? "badge bg-success" : "badge bg-danger";
-                statusBadge.textContent =
-                  data.code.code === 0 ? "Completed" : "Failed";
-                runBtn.disabled = false;
-                runBtn.textContent = "Run Pipeline";
-                stopBtn.disabled = true;
-              }
-            }
+          consoleDiv.appendChild(div);
+          if (autoScroll) consoleDiv.scrollTop = consoleDiv.scrollHeight;
 
-            async function runAgent() {
-              const mode =
-                document.querySelector(".nav-link.active").id === "jira-tab"
-                  ? "jira"
-                  : "file";
-              const consoleDiv = document.getElementById("console");
-              const runBtn = document.getElementById("runBtn");
-              const stopBtn = document.getElementById("stopBtn");
-              const statusBadge = document.getElementById("statusBadge");
-              const resultLinks = document.getElementById("resultLinks");
-              const lintLogBtn = document.getElementById("lintLogBtn");
-              const smokeLogBtn = document.getElementById("smokeLogBtn");
+          // Detect Results Path for linking
+          if (data.message.includes("[STATUS] Starting Agent. Results:")) {
+            const path = data.message.split("Results: ")[1].trim();
+            const urlPath = path.replace(/\\/g, "/").replace(/^\.\//, "");
+            document.getElementById(
+              "summaryLink"
+            ).href = `/${urlPath}/summary.md`;
+            document.getElementById(
+              "resultsLink"
+            ).href = `/${urlPath}/test_results.json`;
+            document.getElementById("pdfLink").href = `/${urlPath}/report.pdf`;
+            window.currentResultPath = urlPath;
+            resultLinks.style.display = "block";
+          }
+        } else if (data.type === "done") {
+          statusBadge.className =
+            data.code.code === 0 ? "badge bg-success" : "badge bg-danger";
+          statusBadge.textContent =
+            data.code.code === 0 ? "Completed" : "Failed";
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Pipeline";
+          stopBtn.disabled = true;
+        }
+      }
 
-              // Client-side Validation
-              if (mode === "file") {
-                const content = document.getElementById("fileContent").value;
-                if (content.trim()) {
-                  try {
-                    JSON.parse(content);
-                  } catch (eJson) {
-                    try {
-                      jsyaml.load(content);
-                    } catch (eYaml) {
-                      alert(
-                        "Validation Error: Input is neither valid JSON nor YAML.\n\nJSON: " +
-                          eJson.message +
-                          "\nYAML: " +
-                          eYaml.message
-                      );
-                      return;
-                    }
-                  }
-                }
-              }
+      async function runAgent() {
+        const mode =
+          document.querySelector(".nav-link.active").id === "jira-tab"
+            ? "jira"
+            : "file";
+        const consoleDiv = document.getElementById("console");
+        const runBtn = document.getElementById("runBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const statusBadge = document.getElementById("statusBadge");
+        const resultLinks = document.getElementById("resultLinks");
+        const lintLogBtn = document.getElementById("lintLogBtn");
+        const smokeLogBtn = document.getElementById("smokeLogBtn");
 
-              // Prepare Payload
-              const payload = {
-                mode,
-                dryRun: document.getElementById("dryRun").checked,
-                verbose: document.getElementById("verbose").checked,
-                clean: document.getElementById("clean").checked,
-                configProfile: document.getElementById("configProfile").value,
-                cleanupThreshold: document.getElementById("cleanupThreshold").value,
-                parallel: document.getElementById("parallel").value,
-              };
-
-              if (mode === "jira") {
-                payload.jira = {
-                  base_url: document.getElementById("jiraUrl").value,
-                  issue_key: document.getElementById("jiraKey").value,
-                  auth: document.getElementById("jiraAuth").value,
-                  webhookUrl: document.getElementById("webhookUrl").value,
-                };
-              } else {
-                payload.fileContent = document.getElementById("fileContent").value;
-              }
-
-              // Reset UI
-              clearConsole();
-              runBtn.disabled = true;
-              runBtn.textContent = "Running...";
-              stopBtn.disabled = false;
-              statusBadge.className = "badge bg-warning text-dark";
-              statusBadge.textContent = "Running";
-              resultLinks.style.display = "none";
-
-              // Initialize Live Charts
-              initLiveCharts();
-
+        // Client-side Validation
+        if (mode === "file") {
+          const content = document.getElementById("fileContent").value;
+          if (content.trim()) {
+            try {
+              JSON.parse(content);
+            } catch (eJson) {
               try {
-                const response = await fetch("/run", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payload),
-                });
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
-
-                  const chunk = decoder.decode(value);
-                  const events = chunk.split("\n\n");
-
-                  events.forEach((event) => {
-                    if (event.startsWith("data: ")) {
-                      const data = JSON.parse(event.replace("data: ", ""));
-                      handleStreamData(data);
-                    }
-                  });
-                }
-              } catch (e) {
-                consoleDiv.innerHTML += `<p class="console-err">Error: ${e.message}</p>`;
-              } finally {
-                runBtn.disabled = false;
-                runBtn.textContent = "Run Pipeline";
-                stopBtn.disabled = true;
-              }
-            }
-
-            function downloadLog() {
-              const content = document.getElementById("logContent").textContent;
-              const title = document.getElementById("logModalTitle").textContent;
-              if (!content) return;
-
-              const blob = new Blob([content], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = title || "log.txt";
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-            }
-
-            async function viewLog(filename) {
-              if (!window.currentResultPath) {
-                alert("No active result found.");
+                jsyaml.load(content);
+              } catch (eYaml) {
+                alert(
+                  "Validation Error: Input is neither valid JSON nor YAML.\n\nJSON: " +
+                    eJson.message +
+                    "\nYAML: " +
+                    eYaml.message
+                );
                 return;
               }
+            }
+          }
+        }
 
-              const modalEl = document.getElementById("logModal");
-              const modal = new bootstrap.Modal(modalEl);
-              const title = document.getElementById("logModalTitle");
-              const content = document.getElementById("logContent");
+        // Prepare Payload
+        const payload = {
+          mode,
+          dryRun: document.getElementById("dryRun").checked,
+          verbose: document.getElementById("verbose").checked,
+          clean: document.getElementById("clean").checked,
+          configProfile: document.getElementById("configProfile").value,
+          cleanupThreshold: document.getElementById("cleanupThreshold").value,
+          parallel: document.getElementById("parallel").value,
+        };
 
-              title.textContent = filename;
-              content.textContent = "Loading...";
-              modal.show();
+        if (mode === "jira") {
+          payload.jira = {
+            base_url: document.getElementById("jiraUrl").value,
+            issue_key: document.getElementById("jiraKey").value,
+            auth: document.getElementById("jiraAuth").value,
+            webhookUrl: document.getElementById("webhookUrl").value,
+          };
+        } else {
+          payload.fileContent = document.getElementById("fileContent").value;
+        }
 
-              try {
-                const res = await fetch(`/${window.currentResultPath}/${filename}`);
-                if (!res.ok) throw new Error("Log file not found");
-                content.textContent = await res.text();
-              } catch (e) {
-                content.textContent = "Error loading log: " + e.message;
+        // Reset UI
+        clearConsole();
+        runBtn.disabled = true;
+        runBtn.textContent = "Running...";
+        stopBtn.disabled = false;
+        statusBadge.className = "badge bg-warning text-dark";
+        statusBadge.textContent = "Running";
+        resultLinks.style.display = "none";
+
+        // Initialize Live Charts
+        initLiveCharts();
+
+        try {
+          const response = await fetch("/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
+
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+                handleStreamData(data);
               }
-            }
+            });
+          }
+        } catch (e) {
+          consoleDiv.innerHTML += `<p class="console-err">Error: ${e.message}</p>`;
+        } finally {
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Pipeline";
+          stopBtn.disabled = true;
+        }
+      }
 
-            async function reconnectStream() {
-              const consoleDiv = document.getElementById("console");
-              const runBtn = document.getElementById("runBtn");
-              const stopBtn = document.getElementById("stopBtn");
+      function downloadLog() {
+        const content = document.getElementById("logContent").textContent;
+        const title = document.getElementById("logModalTitle").textContent;
+        if (!content) return;
 
-              // Initialize Live Charts
-              initLiveCharts();
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = title || "log.txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
 
-              try {
-                const response = await fetch("/stream");
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
+      async function viewLog(filename) {
+        if (!window.currentResultPath) {
+          alert("No active result found.");
+          return;
+        }
 
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
+        const modalEl = document.getElementById("logModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const title = document.getElementById("logModalTitle");
+        const content = document.getElementById("logContent");
 
-                  const chunk = decoder.decode(value);
-                  const events = chunk.split("\n\n");
+        title.textContent = filename;
+        content.textContent = "Loading...";
+        modal.show();
 
-                  events.forEach((event) => {
-                    if (event.startsWith("data: ")) {
-                      const data = JSON.parse(event.replace("data: ", ""));
-                      handleStreamData(data);
-                    }
-                  });
-                }
-              } catch (e) {
-                consoleDiv.innerHTML += `<p class="console-err">Error reconnecting: ${e.message}</p>`;
-                runBtn.disabled = false;
-                runBtn.textContent = "Run Pipeline";
-                stopBtn.disabled = true;
+        try {
+          const res = await fetch(`/${window.currentResultPath}/${filename}`);
+          if (!res.ok) throw new Error("Log file not found");
+          content.textContent = await res.text();
+        } catch (e) {
+          content.textContent = "Error loading log: " + e.message;
+        }
+      }
+
+      async function reconnectStream() {
+        const consoleDiv = document.getElementById("console");
+        const runBtn = document.getElementById("runBtn");
+        const stopBtn = document.getElementById("stopBtn");
+
+        // Initialize Live Charts
+        initLiveCharts();
+
+        try {
+          const response = await fetch("/stream");
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
+
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+                handleStreamData(data);
               }
+            });
+          }
+        } catch (e) {
+          consoleDiv.innerHTML += `<p class="console-err">Error reconnecting: ${e.message}</p>`;
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Pipeline";
+          stopBtn.disabled = true;
+        }
+      }
+
+      async function stopAgent() {
+        const stopBtn = document.getElementById("stopBtn");
+        if (!confirm("Are you sure you want to stop the execution?")) return;
+
+        try {
+          const res = await fetch("/stop", { method: "POST" });
+          const data = await res.json();
+          alert(data.message);
+        } catch (e) {
+          alert("Error stopping agent: " + e.message);
+        }
+      }
+
+      let liveLatencyChart = null;
+      let liveRpsChart = null;
+      let liveVUsChart = null;
+      let liveErrorChart = null;
+      let rpsBuckets = {};
+
+      function initLiveCharts() {
+        rpsBuckets = {};
+
+        const ctxLat = document
+          .getElementById("liveLatencyChart")
+          .getContext("2d");
+        if (liveLatencyChart) liveLatencyChart.destroy();
+        liveLatencyChart = new Chart(ctxLat, {
+          type: "scatter",
+          data: {
+            datasets: [
+              {
+                label: "Latency (ms)",
+                data: [],
+                backgroundColor: "rgba(255, 99, 132, 0.5)",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: {
+                type: "linear",
+                position: "bottom",
+                title: { display: true, text: "Time (s)" },
+              },
+              y: { title: { display: true, text: "ms" }, min: 0 },
+            },
+            plugins: { title: { display: true, text: "Live Latency" } },
+          },
+        });
+
+        const ctxRps = document.getElementById("liveRpsChart").getContext("2d");
+        if (liveRpsChart) liveRpsChart.destroy();
+        liveRpsChart = new Chart(ctxRps, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "RPS",
+                data: [],
+                borderColor: "rgba(54, 162, 235, 1)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { title: { display: true, text: "Time (s)" } },
+              y: { title: { display: true, text: "Req/s" }, beginAtZero: true },
+            },
+            plugins: { title: { display: true, text: "Live Throughput" } },
+          },
+        });
+
+        const ctxVUs = document.getElementById("liveVUsChart").getContext("2d");
+        if (liveVUsChart) liveVUsChart.destroy();
+        liveVUsChart = new Chart(ctxVUs, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                label: "Virtual Users",
+                data: [],
+                borderColor: "rgba(75, 192, 192, 1)",
+                stepped: true,
+                fill: true,
+                backgroundColor: "rgba(75, 192, 192, 0.2)",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: {
+                type: "linear",
+                position: "bottom",
+                title: { display: true, text: "Time (s)" },
+              },
+              y: { title: { display: true, text: "VUs" }, beginAtZero: true },
+            },
+            plugins: { title: { display: true, text: "Live VUs" } },
+          },
+        });
+
+        const ctxErr = document
+          .getElementById("liveErrorChart")
+          .getContext("2d");
+        if (liveErrorChart) liveErrorChart.destroy();
+        liveErrorChart = new Chart(ctxErr, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Errors",
+                data: [],
+                borderColor: "rgba(255, 99, 132, 1)",
+                backgroundColor: "rgba(255, 99, 132, 0.2)",
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { title: { display: true, text: "Time (s)" } },
+              y: { title: { display: true, text: "Count" }, beginAtZero: true },
+            },
+            plugins: { title: { display: true, text: "Live Errors" } },
+          },
+        });
+      }
+
+      let startTime = null;
+
+      function updateLiveCharts(jsonStr) {
+        try {
+          const data = JSON.parse(jsonStr);
+          const time = new Date(data.data.time).getTime();
+          if (!startTime) startTime = time;
+          const relTime = (time - startTime) / 1000;
+
+          if (data.metric === "http_req_duration") {
+            liveLatencyChart.data.datasets[0].data.push({
+              x: relTime,
+              y: data.data.value,
+            });
+            if (liveLatencyChart.data.datasets[0].data.length > 500)
+              liveLatencyChart.data.datasets[0].data.shift();
+            liveLatencyChart.update("none");
+          } else if (data.metric === "http_reqs") {
+            const sec = Math.floor(relTime);
+            rpsBuckets[sec] = (rpsBuckets[sec] || 0) + 1;
+
+            // Update RPS chart data from buckets
+            const secs = Object.keys(rpsBuckets).sort((a, b) => a - b);
+            liveRpsChart.data.labels = secs;
+            liveRpsChart.data.datasets[0].data = secs.map((s) => rpsBuckets[s]);
+            liveRpsChart.update("none");
+          } else if (data.metric === "vus") {
+            liveVUsChart.data.datasets[0].data.push({
+              x: relTime,
+              y: data.data.value,
+            });
+            if (liveVUsChart.data.datasets[0].data.length > 500)
+              liveVUsChart.data.datasets[0].data.shift();
+            liveVUsChart.update("none");
+          } else if (data.metric === "http_req_failed" && data.data.value > 0) {
+            // Accumulate errors per second similar to RPS, or just plot points
+            // For simplicity, let's plot points
+            liveErrorChart.data.labels.push(relTime.toFixed(1));
+            liveErrorChart.data.datasets[0].data.push(data.data.value);
+            if (liveErrorChart.data.labels.length > 100) {
+              liveErrorChart.data.labels.shift();
+              liveErrorChart.data.datasets[0].data.shift();
             }
+            liveErrorChart.update("none");
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
 
-            async function stopAgent() {
-              const stopBtn = document.getElementById("stopBtn");
-              if (!confirm("Are you sure you want to stop the execution?")) return;
+      let selectedRuns = [];
 
-              try {
-                const res = await fetch("/stop", { method: "POST" });
-                const data = await res.json();
-                alert(data.message);
-              } catch (e) {
-                alert("Error stopping agent: " + e.message);
-              }
-            }
+      function toggleRunSelection(folder) {
+        const idx = selectedRuns.indexOf(folder);
+        if (idx > -1) {
+          selectedRuns.splice(idx, 1);
+        } else {
+          if (selectedRuns.length >= 2) {
+            const first = selectedRuns.shift();
+            const cb = document.querySelector(`input[value="${first}"]`);
+            if (cb) cb.checked = false;
+          }
+          selectedRuns.push(folder);
+        }
+        updateSelectionButtons();
+      }
 
-            let liveLatencyChart = null;
-            let liveRpsChart = null;
-            let liveVUsChart = null;
-            let liveErrorChart = null;
-            let rpsBuckets = {};
+      function updateSelectionButtons() {
+        const delBtn = document.getElementById("deleteBtn");
+        delBtn.disabled = selectedRuns.length === 0;
+        delBtn.textContent =
+          selectedRuns.length > 0
+            ? `Delete Selected (${selectedRuns.length})`
+            : "Delete Selected";
 
-            function initLiveCharts() {
-              rpsBuckets = {};
+        const btn = document.getElementById("compareBtn");
+        btn.textContent = `Compare Selected (${selectedRuns.length})`;
+        btn.disabled = selectedRuns.length !== 2;
+      }
 
-              const ctxLat = document
-                .getElementById("liveLatencyChart")
-                .getContext("2d");
-              if (liveLatencyChart) liveLatencyChart.destroy();
-              liveLatencyChart = new Chart(ctxLat, {
-                type: "scatter",
-                data: {
-                  datasets: [
-                    {
-                      label: "Latency (ms)",
-                      data: [],
-                      backgroundColor: "rgba(255, 99, 132, 0.5)",
-                    },
-                  ],
-                },
-                options: {
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  animation: false,
-                  scales: {
-                    x: {
-                      type: "linear",
-                      position: "bottom",
-                      title: { display: true, text: "Time (s)" },
-                    },
-                    y: { title: { display: true, text: "ms" }, min: 0 },
-                  },
-                  plugins: { title: { display: true, text: "Live Latency" } },
-                },
-              });
+      async function loadHistory() {
+        selectedRuns = [];
+        updateSelectionButtons();
+        const list = document.getElementById("historyList");
+        list.innerHTML =
+          '<div class="text-center text-muted p-3">Loading...</div>';
+        try {
+          const res = await fetch("/api/history");
+          const folders = await res.json();
 
-              const ctxRps = document.getElementById("liveRpsChart").getContext("2d");
-              if (liveRpsChart) liveRpsChart.destroy();
-              liveRpsChart = new Chart(ctxRps, {
-                type: "line",
-                data: {
-                  labels: [],
-                  datasets: [
-                    {
-                      label: "RPS",
-                      data: [],
-                      borderColor: "rgba(54, 162, 235, 1)",
-                      tension: 0.1,
-                    },
-                  ],
-                },
-                options: {
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  animation: false,
-                  scales: {
-                    x: { title: { display: true, text: "Time (s)" } },
-                    y: { title: { display: true, text: "Req/s" }, beginAtZero: true },
-                  },
-                  plugins: { title: { display: true, text: "Live Throughput" } },
-                },
-              });
+          list.innerHTML = "";
+          if (!folders || folders.length === 0) {
+            list.innerHTML =
+              '<div class="text-center text-muted p-3">No results found.</div>';
+            return;
+          }
 
-              const ctxVUs = document.getElementById("liveVUsChart").getContext("2d");
-              if (liveVUsChart) liveVUsChart.destroy();
-              liveVUsChart = new Chart(ctxVUs, {
-                type: "line",
-                data: {
-                  datasets: [
-                    {
-                      label: "Virtual Users",
-                      data: [],
-                      borderColor: "rgba(75, 192, 192, 1)",
-                      stepped: true,
-                      fill: true,
-                      backgroundColor: "rgba(75, 192, 192, 0.2)",
-                    },
-                  ],
-                },
-                options: {
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  animation: false,
-                  scales: {
-                    x: {
-                      type: "linear",
-                      position: "bottom",
-                      title: { display: true, text: "Time (s)" },
-                    },
-                    y: { title: { display: true, text: "VUs" }, beginAtZero: true },
-                  },
-                  plugins: { title: { display: true, text: "Live VUs" } },
-                },
-              });
-
-              const ctxErr = document.getElementById("liveErrorChart").getContext("2d");
-              if (liveErrorChart) liveErrorChart.destroy();
-              liveErrorChart = new Chart(ctxErr, {
-                type: "line",
-                data: {
-                  labels: [],
-                  datasets: [
-                    {
-                      label: "Errors",
-                      data: [],
-                      borderColor: "rgba(255, 99, 132, 1)",
-                      backgroundColor: "rgba(255, 99, 132, 0.2)",
-                      fill: true,
-                    },
-                  ],
-                },
-                options: {
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  animation: false,
-                  scales: {
-                    x: { title: { display: true, text: "Time (s)" } },
-                    y: { title: { display: true, text: "Count" }, beginAtZero: true },
-                  },
-                  plugins: { title: { display: true, text: "Live Errors" } },
-                },
-              });
-            }
-
-            let startTime = null;
-
-            function updateLiveCharts(jsonStr) {
-              try {
-                const data = JSON.parse(jsonStr);
-                const time = new Date(data.data.time).getTime();
-                if (!startTime) startTime = time;
-                const relTime = (time - startTime) / 1000;
-
-                if (data.metric === "http_req_duration") {
-                  liveLatencyChart.data.datasets[0].data.push({
-                    x: relTime,
-                    y: data.data.value,
-                  });
-                  if (liveLatencyChart.data.datasets[0].data.length > 500)
-                    liveLatencyChart.data.datasets[0].data.shift();
-                  liveLatencyChart.update("none");
-                } else if (data.metric === "http_reqs") {
-                  const sec = Math.floor(relTime);
-                  rpsBuckets[sec] = (rpsBuckets[sec] || 0) + 1;
-
-                  // Update RPS chart data from buckets
-                  const secs = Object.keys(rpsBuckets).sort((a, b) => a - b);
-                  liveRpsChart.data.labels = secs;
-                  liveRpsChart.data.datasets[0].data = secs.map((s) => rpsBuckets[s]);
-                  liveRpsChart.update("none");
-                } else if (data.metric === "vus") {
-                  liveVUsChart.data.datasets[0].data.push({
-                    x: relTime,
-                    y: data.data.value,
-                  });
-                  if (liveVUsChart.data.datasets[0].data.length > 500)
-                    liveVUsChart.data.datasets[0].data.shift();
-                  liveVUsChart.update("none");
-                } else if (data.metric === "http_req_failed" && data.data.value > 0) {
-                   // Accumulate errors per second similar to RPS, or just plot points
-                   // For simplicity, let's plot points
-                   liveErrorChart.data.labels.push(relTime.toFixed(1));
-                   liveErrorChart.data.datasets[0].data.push(data.data.value);
-                   if (liveErrorChart.data.labels.length > 100) {
-                     liveErrorChart.data.labels.shift();
-                     liveErrorChart.data.datasets[0].data.shift();
-                   }
-                   liveErrorChart.update("none");
-                }
-              } catch (e) {
-                console.error(e);
-              }
-            }
-
-            let selectedRuns = [];
-
-            function toggleRunSelection(folder) {
-              const idx = selectedRuns.indexOf(folder);
-              if (idx > -1) {
-                selectedRuns.splice(idx, 1);
-              } else {
-                if (selectedRuns.length >= 2) {
-                  const first = selectedRuns.shift();
-                  const cb = document.querySelector(`input[value="${first}"]`);
-                  if (cb) cb.checked = false;
-                }
-                selectedRuns.push(folder);
-              }
-              updateSelectionButtons();
-            }
-
-            function updateSelectionButtons() {
-              const delBtn = document.getElementById("deleteBtn");
-              delBtn.disabled = selectedRuns.length === 0;
-              delBtn.textContent =
-                selectedRuns.length > 0
-                  ? `Delete Selected (${selectedRuns.length})`
-                  : "Delete Selected";
-
-              const btn = document.getElementById("compareBtn");
-              btn.textContent = `Compare Selected (${selectedRuns.length})`;
-              btn.disabled = selectedRuns.length !== 2;
-            }
-
-            async function loadHistory() {
-              selectedRuns = [];
-              updateSelectionButtons();
-              const list = document.getElementById("historyList");
-              list.innerHTML =
-                '<div class="text-center text-muted p-3">Loading...</div>';
-              try {
-                const res = await fetch("/api/history");
-                const folders = await res.json();
-
-                list.innerHTML = "";
-                if (!folders || folders.length === 0) {
-                  list.innerHTML =
-                    '<div class="text-center text-muted p-3">No results found.</div>';
-                  return;
-                }
-
-                folders.forEach((folder) => {
-                  const item = document.createElement("div");
-                  item.className = "list-group-item";
-                  item.innerHTML = `
+          folders.forEach((folder) => {
+            const item = document.createElement("div");
+            item.className = "list-group-item";
+            item.innerHTML = `
                     <div class="d-flex w-100 align-items-center">
                       <div class="me-3">
                         <input type="checkbox" class="form-check-input" value="${folder}" onchange="toggleRunSelection('${folder}')">
@@ -1478,552 +1510,560 @@
                        <a href="/results/${folder}/script.js" target="_blank" class="text-decoration-none small text-muted ms-4">View Script</a>
                     </div>
                   `;
-                  list.appendChild(item);
-                });
-              } catch (e) {
-                list.innerHTML = `<div class="text-danger p-3">Error: ${e.message}</div>`;
-              }
-            }
+            list.appendChild(item);
+          });
+        } catch (e) {
+          list.innerHTML = `<div class="text-danger p-3">Error: ${e.message}</div>`;
+        }
+      }
 
-            async function compareRuns() {
-              if (selectedRuns.length !== 2) return;
+      async function compareRuns() {
+        if (selectedRuns.length !== 2) return;
 
-              const modalEl = document.getElementById("comparisonModal");
-              const modal = new bootstrap.Modal(modalEl);
-              const output = document.getElementById("comparisonOutput");
-              let rawMarkdown = "";
-              output.textContent = "Comparing...";
-              modal.show();
+        const modalEl = document.getElementById("comparisonModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const output = document.getElementById("comparisonOutput");
+        let rawMarkdown = "";
+        output.textContent = "Comparing...";
+        modal.show();
 
-              try {
-                const response = await fetch("/compare", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    folder1: selectedRuns[0],
-                    folder2: selectedRuns[1],
-                  }),
-                });
+        try {
+          const response = await fetch("/compare", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folder1: selectedRuns[0],
+              folder2: selectedRuns[1],
+            }),
+          });
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                output.textContent = "";
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          output.textContent = "";
 
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-                  const chunk = decoder.decode(value);
-                  const events = chunk.split("\n\n");
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
 
-                  events.forEach((event) => {
-                    if (event.startsWith("data: ")) {
-                      const data = JSON.parse(event.replace("data: ", ""));
-                      if (data.type === "stdout") {
-                        rawMarkdown += data.message + "\n";
-                        output.innerHTML = marked.parse(rawMarkdown);
-                      }
-                    }
-                  });
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+                if (data.type === "stdout") {
+                  rawMarkdown += data.message + "\n";
+                  output.innerHTML = marked.parse(rawMarkdown);
                 }
-                output.innerHTML = marked.parse(rawMarkdown);
-              } catch (e) {
-                output.textContent += `\nError: ${e.message}`;
               }
-            }
+            });
+          }
+          output.innerHTML = marked.parse(rawMarkdown);
+        } catch (e) {
+          output.textContent += `\nError: ${e.message}`;
+        }
+      }
 
-            async function deleteRuns() {
-              if (selectedRuns.length === 0) return;
-              if (
-                !confirm(
-                  `Are you sure you want to delete ${selectedRuns.length} run(s)? This cannot be undone.`
-                )
-              )
-                return;
+      async function deleteRuns() {
+        if (selectedRuns.length === 0) return;
+        if (
+          !confirm(
+            `Are you sure you want to delete ${selectedRuns.length} run(s)? This cannot be undone.`
+          )
+        )
+          return;
 
+        try {
+          const res = await fetch("/api/delete-run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folders: selectedRuns }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            loadHistory(); // Refresh list
+          } else {
+            alert("Error deleting runs: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      let latencyChartInstance = null;
+      let rpsChartInstance = null;
+
+      async function viewCharts(folder) {
+        const modalEl = document.getElementById("chartModal");
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        const loading = document.getElementById("chartLoading");
+        loading.style.display = "block";
+
+        if (latencyChartInstance) latencyChartInstance.destroy();
+        if (rpsChartInstance) rpsChartInstance.destroy();
+
+        try {
+          const res = await fetch(`/results/${folder}/test_results.json`);
+          if (!res.ok) throw new Error("Results file not found");
+
+          const text = await res.text();
+          const lines = text.split("\n").filter((l) => l.trim());
+
+          // Parse NDJSON
+          const dataPoints = lines
+            .map((l) => {
               try {
-                const res = await fetch("/api/delete-run", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ folders: selectedRuns }),
-                });
-                const data = await res.json();
-                if (res.ok) {
-                  loadHistory(); // Refresh list
-                } else {
-                  alert("Error deleting runs: " + (data.error || "Unknown error"));
-                }
+                return JSON.parse(l);
               } catch (e) {
-                alert("Error: " + e.message);
+                return null;
               }
-            }
+            })
+            .filter((d) => d && d.type === "Point");
 
-            let latencyChartInstance = null;
-            let rpsChartInstance = null;
+          // Process Data
+          // 1. Latency (http_req_duration)
+          const latencyPoints = dataPoints
+            .filter((d) => d.metric === "http_req_duration")
+            .map((d) => ({ x: new Date(d.data.time), y: d.data.value }));
 
-            async function viewCharts(folder) {
-              const modalEl = document.getElementById("chartModal");
-              const modal = new bootstrap.Modal(modalEl);
-              modal.show();
+          // 2. RPS (http_reqs) - Aggregate by second
+          const rpsMap = new Map();
+          dataPoints
+            .filter((d) => d.metric === "http_reqs")
+            .forEach((d) => {
+              const sec = new Date(d.data.time).setMilliseconds(0);
+              rpsMap.set(sec, (rpsMap.get(sec) || 0) + 1);
+            });
+          const rpsPoints = Array.from(rpsMap.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([time, count]) => ({ x: new Date(time), y: count }));
 
-              const loading = document.getElementById("chartLoading");
-              loading.style.display = "block";
-
-              if (latencyChartInstance) latencyChartInstance.destroy();
-              if (rpsChartInstance) rpsChartInstance.destroy();
-
-              try {
-                const res = await fetch(`/results/${folder}/test_results.json`);
-                if (!res.ok) throw new Error("Results file not found");
-
-                const text = await res.text();
-                const lines = text.split("\n").filter((l) => l.trim());
-
-                // Parse NDJSON
-                const dataPoints = lines
-                  .map((l) => {
-                    try {
-                      return JSON.parse(l);
-                    } catch (e) {
-                      return null;
-                    }
-                  })
-                  .filter((d) => d && d.type === "Point");
-
-                // Process Data
-                // 1. Latency (http_req_duration)
-                const latencyPoints = dataPoints
-                  .filter((d) => d.metric === "http_req_duration")
-                  .map((d) => ({ x: new Date(d.data.time), y: d.data.value }));
-
-                // 2. RPS (http_reqs) - Aggregate by second
-                const rpsMap = new Map();
-                dataPoints
-                  .filter((d) => d.metric === "http_reqs")
-                  .forEach((d) => {
-                    const sec = new Date(d.data.time).setMilliseconds(0);
-                    rpsMap.set(sec, (rpsMap.get(sec) || 0) + 1);
-                  });
-                const rpsPoints = Array.from(rpsMap.entries())
-                  .sort((a, b) => a[0] - b[0])
-                  .map(([time, count]) => ({ x: new Date(time), y: count }));
-
-                // Render Charts
-                const ctxLatency = document
-                  .getElementById("latencyChart")
-                  .getContext("2d");
-                latencyChartInstance = new Chart(ctxLatency, {
-                  type: "scatter",
-                  data: {
-                    datasets: [
-                      {
-                        label: "Latency (ms)",
-                        data: latencyPoints,
-                        backgroundColor: "rgba(255, 99, 132, 0.5)",
-                      },
-                    ],
-                  },
-                  options: {
-                    responsive: true,
-                    scales: {
-                      x: {
-                        type: "linear",
-                        position: "bottom",
-                        title: { display: true, text: "Time" },
-                        ticks: {
-                          callback: (val) => new Date(val).toLocaleTimeString(),
-                        },
-                      },
-                      y: { title: { display: true, text: "Duration (ms)" } },
-                    },
-                    plugins: { title: { display: true, text: "Request Duration" } },
-                  },
-                });
-
-                const ctxRps = document.getElementById("rpsChart").getContext("2d");
-                rpsChartInstance = new Chart(ctxRps, {
-                  type: "line",
-                  data: {
-                    datasets: [
-                      {
-                        label: "RPS",
-                        data: rpsPoints,
-                        borderColor: "rgba(54, 162, 235, 1)",
-                        tension: 0.1,
-                      },
-                    ],
-                  },
-                  options: {
-                    responsive: true,
-                    scales: {
-                      x: {
-                        type: "linear",
-                        position: "bottom",
-                        title: { display: true, text: "Time" },
-                        ticks: {
-                          callback: (val) => new Date(val).toLocaleTimeString(),
-                        },
-                      },
-                      y: {
-                        title: { display: true, text: "Requests / Sec" },
-                        beginAtZero: true,
-                      },
-                    },
-                    plugins: { title: { display: true, text: "Throughput" } },
-                  },
-                });
-              } catch (e) {
-                alert("Failed to load chart data: " + e.message);
-              } finally {
-                loading.style.display = "none";
-              }
-            }
-
-            async function saveConfig() {
-              const payload = {
-                jira: {
-                  base_url: document.getElementById("jiraUrl").value,
-                  issue_key: document.getElementById("jiraKey").value,
-                  auth: document.getElementById("jiraAuth").value,
+          // Render Charts
+          const ctxLatency = document
+            .getElementById("latencyChart")
+            .getContext("2d");
+          latencyChartInstance = new Chart(ctxLatency, {
+            type: "scatter",
+            data: {
+              datasets: [
+                {
+                  label: "Latency (ms)",
+                  data: latencyPoints,
+                  backgroundColor: "rgba(255, 99, 132, 0.5)",
                 },
-              };
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: {
+                x: {
+                  type: "linear",
+                  position: "bottom",
+                  title: { display: true, text: "Time" },
+                  ticks: {
+                    callback: (val) => new Date(val).toLocaleTimeString(),
+                  },
+                },
+                y: { title: { display: true, text: "Duration (ms)" } },
+              },
+              plugins: { title: { display: true, text: "Request Duration" } },
+            },
+          });
 
-              try {
-                const res = await fetch("/save-config", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payload),
-                });
-                const data = await res.json();
-                if (res.ok) {
-                  alert(data.message);
-                } else {
-                  alert("Error saving config: " + (data.error || "Unknown error"));
-                }
-              } catch (e) {
-                alert("Error: " + e.message);
-              }
+          const ctxRps = document.getElementById("rpsChart").getContext("2d");
+          rpsChartInstance = new Chart(ctxRps, {
+            type: "line",
+            data: {
+              datasets: [
+                {
+                  label: "RPS",
+                  data: rpsPoints,
+                  borderColor: "rgba(54, 162, 235, 1)",
+                  tension: 0.1,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: {
+                x: {
+                  type: "linear",
+                  position: "bottom",
+                  title: { display: true, text: "Time" },
+                  ticks: {
+                    callback: (val) => new Date(val).toLocaleTimeString(),
+                  },
+                },
+                y: {
+                  title: { display: true, text: "Requests / Sec" },
+                  beginAtZero: true,
+                },
+              },
+              plugins: { title: { display: true, text: "Throughput" } },
+            },
+          });
+        } catch (e) {
+          alert("Failed to load chart data: " + e.message);
+        } finally {
+          loading.style.display = "none";
+        }
+      }
+
+      async function saveConfig() {
+        const payload = {
+          jira: {
+            base_url: document.getElementById("jiraUrl").value,
+            issue_key: document.getElementById("jiraKey").value,
+            auth: document.getElementById("jiraAuth").value,
+          },
+          gemini_api_key: document.getElementById("geminiKey").value,
+        };
+
+        try {
+          const res = await fetch("/save-config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+          } else {
+            alert("Error saving config: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function resetConfig() {
+        if (
+          !confirm("Are you sure you want to delete the default configuration?")
+        )
+          return;
+        try {
+          const res = await fetch("/reset-config", { method: "POST" });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            // Clear fields
+            document.getElementById("jiraUrl").value = "";
+            document.getElementById("jiraKey").value = "";
+            document.getElementById("jiraAuth").value = "";
+            document.getElementById("geminiKey").value = "";
+          } else {
+            alert("Error resetting config: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function showEnvVars() {
+        const modalEl = document.getElementById("envModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const tbody = document.getElementById("envTableBody");
+
+        tbody.innerHTML =
+          '<tr><td colspan="2" class="text-center">Loading...</td></tr>';
+        modal.show();
+
+        try {
+          const res = await fetch("/api/env");
+          const envs = await res.json();
+
+          tbody.innerHTML = "";
+          Object.keys(envs)
+            .sort()
+            .forEach((key) => {
+              const row = document.createElement("tr");
+              row.innerHTML = `<td>${key}</td><td class="text-break">${envs[key]}</td>`;
+              tbody.appendChild(row);
+            });
+
+          // Search functionality
+          document.getElementById("envSearch").onkeyup = function () {
+            const val = this.value.toLowerCase();
+            const rows = tbody.getElementsByTagName("tr");
+            for (let i = 0; i < rows.length; i++) {
+              const text = rows[i].textContent.toLowerCase();
+              rows[i].style.display = text.includes(val) ? "" : "none";
             }
+          };
+        } catch (e) {
+          tbody.innerHTML = `<tr><td colspan="2" class="text-danger">Error: ${e.message}</td></tr>`;
+        }
+      }
 
-            async function resetConfig() {
-              if (
-                !confirm("Are you sure you want to delete the default configuration?")
-              )
-                return;
-              try {
-                const res = await fetch("/reset-config", { method: "POST" });
-                const data = await res.json();
-                if (res.ok) {
-                  alert(data.message);
-                  // Clear fields
-                  document.getElementById("jiraUrl").value = "";
-                  document.getElementById("jiraKey").value = "";
-                  document.getElementById("jiraAuth").value = "";
-                } else {
-                  alert("Error resetting config: " + (data.error || "Unknown error"));
-                }
-              } catch (e) {
-                alert("Error: " + e.message);
-              }
-            }
+      async function openConfigEditor() {
+        const modalEl = document.getElementById("configEditorModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const textarea = document.getElementById("configEditorContent");
 
-            async function showEnvVars() {
-              const modalEl = document.getElementById("envModal");
-              const modal = new bootstrap.Modal(modalEl);
-              const tbody = document.getElementById("envTableBody");
+        textarea.value = "Loading...";
+        modal.show();
 
-              tbody.innerHTML =
-                '<tr><td colspan="2" class="text-center">Loading...</td></tr>';
-              modal.show();
+        try {
+          const res = await fetch("/get-config-raw?file=config.yaml");
+          const data = await res.json();
+          if (res.ok) {
+            textarea.value = data.content || "";
+          } else {
+            textarea.value = "Error loading config: " + data.error;
+          }
+        } catch (e) {
+          textarea.value = "Error: " + e.message;
+        }
+      }
 
-              try {
-                const res = await fetch("/api/env");
-                const envs = await res.json();
+      async function saveRawConfig() {
+        const content = document.getElementById("configEditorContent").value;
+        try {
+          const res = await fetch("/save-config-raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: "config.yaml", content: content }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            bootstrap.Modal.getInstance(
+              document.getElementById("configEditorModal")
+            ).hide();
+            // Reload config into form
+            window.dispatchEvent(new Event("DOMContentLoaded"));
+          } else {
+            alert("Error saving config: " + data.error);
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
 
-                tbody.innerHTML = "";
-                Object.keys(envs)
-                  .sort()
-                  .forEach((key) => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `<td>${key}</td><td class="text-break">${envs[key]}</td>`;
-                    tbody.appendChild(row);
-                  });
+      function openCreateProfileModal() {
+        const modal = new bootstrap.Modal(
+          document.getElementById("createProfileModal")
+        );
+        document.getElementById("newProfileName").value = "";
+        modal.show();
+      }
 
-                // Search functionality
-                document.getElementById("envSearch").onkeyup = function () {
-                  const val = this.value.toLowerCase();
-                  const rows = tbody.getElementsByTagName("tr");
-                  for (let i = 0; i < rows.length; i++) {
-                    const text = rows[i].textContent.toLowerCase();
-                    rows[i].style.display = text.includes(val) ? "" : "none";
-                  }
-                };
-              } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="2" class="text-danger">Error: ${e.message}</td></tr>`;
-              }
-            }
+      async function createProfile() {
+        const nameInput = document.getElementById("newProfileName");
+        let name = nameInput.value.trim();
+        if (!name) {
+          alert("Please enter a profile name.");
+          return;
+        }
+        if (
+          !name.toLowerCase().endsWith(".yaml") &&
+          !name.toLowerCase().endsWith(".yml")
+        ) {
+          name += ".yaml";
+        }
 
-            async function openConfigEditor() {
-              const modalEl = document.getElementById("configEditorModal");
-              const modal = new bootstrap.Modal(modalEl);
-              const textarea = document.getElementById("configEditorContent");
-
-              textarea.value = "Loading...";
-              modal.show();
-
-              try {
-                const res = await fetch("/get-config-raw?file=config.yaml");
-                const data = await res.json();
-                if (res.ok) {
-                  textarea.value = data.content || "";
-                } else {
-                  textarea.value = "Error loading config: " + data.error;
-                }
-              } catch (e) {
-                textarea.value = "Error: " + e.message;
-              }
-            }
-
-            async function saveRawConfig() {
-              const content = document.getElementById("configEditorContent").value;
-              try {
-                const res = await fetch("/save-config-raw", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ filename: "config.yaml", content: content }),
-                });
-                const data = await res.json();
-                if (res.ok) {
-                  alert(data.message);
-                  bootstrap.Modal.getInstance(
-                    document.getElementById("configEditorModal")
-                  ).hide();
-                  // Reload config into form
-                  window.dispatchEvent(new Event("DOMContentLoaded"));
-                } else {
-                  alert("Error saving config: " + data.error);
-                }
-              } catch (e) {
-                alert("Error: " + e.message);
-              }
-            }
-
-            function openCreateProfileModal() {
-              const modal = new bootstrap.Modal(
-                document.getElementById("createProfileModal")
-              );
-              document.getElementById("newProfileName").value = "";
-              modal.show();
-            }
-
-            async function createProfile() {
-              const nameInput = document.getElementById("newProfileName");
-              let name = nameInput.value.trim();
-              if (!name) {
-                alert("Please enter a profile name.");
-                return;
-              }
-              if (
-                !name.toLowerCase().endsWith(".yaml") &&
-                !name.toLowerCase().endsWith(".yml")
-              ) {
-                name += ".yaml";
-              }
-
-              const content = `jira_url: ""
+        const content = `jira_url: ""
       jira_key: ""
       jira_auth: ""
       output_dir: "./results"
       `;
 
-              try {
-                const res = await fetch("/save-config-raw", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ filename: name, content: content }),
-                });
-                const data = await res.json();
-                if (res.ok) {
-                  alert(data.message);
-                  bootstrap.Modal.getInstance(
-                    document.getElementById("createProfileModal")
-                  ).hide();
-                  await loadProfiles();
-                  document.getElementById("configProfile").value = name;
-                } else {
-                  alert("Error creating profile: " + data.error);
-                }
-              } catch (e) {
-                alert("Error: " + e.message);
-              }
+        try {
+          const res = await fetch("/save-config-raw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: name, content: content }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            bootstrap.Modal.getInstance(
+              document.getElementById("createProfileModal")
+            ).hide();
+            await loadProfiles();
+            document.getElementById("configProfile").value = name;
+          } else {
+            alert("Error creating profile: " + data.error);
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function loadProfiles() {
+        try {
+          const res = await fetch("/api/profiles");
+          const profiles = await res.json();
+          const select = document.getElementById("configProfile");
+
+          select.innerHTML = "";
+
+          if (profiles.length === 0) {
+            const option = document.createElement("option");
+            option.text = "No profiles found";
+            select.add(option);
+            return;
+          }
+
+          profiles.forEach((p) => {
+            const option = document.createElement("option");
+            option.value = p;
+            option.text = p;
+            if (p === "config.yaml") option.selected = true;
+            select.add(option);
+          });
+        } catch (e) {
+          console.error("Failed to load profiles", e);
+        }
+      }
+
+      let healthInterval = null;
+
+      function startHealthMonitor() {
+        if (healthInterval) return; // Already running
+
+        const updateHealth = async () => {
+          try {
+            const res = await fetch("/api/system-health");
+            if (!res.ok) throw new Error("Failed to fetch health data");
+            const data = await res.json();
+
+            const cpuBar = document.getElementById("cpuUsageBar");
+            const memBar = document.getElementById("memUsageBar");
+
+            cpuBar.style.width = data.cpu_percent + "%";
+            cpuBar.textContent = data.cpu_percent.toFixed(1) + "%";
+
+            memBar.style.width = data.memory_percent + "%";
+            memBar.textContent = data.memory_percent.toFixed(1) + "%";
+          } catch (e) {
+            console.error("Health monitor failed:", e);
+            stopHealthMonitor(); // Stop polling on error
+          }
+        };
+
+        updateHealth(); // Initial call
+        healthInterval = setInterval(updateHealth, 2500); // Update every 2.5 seconds
+      }
+
+      function stopHealthMonitor() {
+        if (healthInterval) {
+          clearInterval(healthInterval);
+          healthInterval = null;
+        }
+      }
+
+      async function checkServerStatus() {
+        try {
+          const res = await fetch("/api/status");
+          if (res.ok) {
+            const status = await res.json();
+            if (status.is_running) {
+              const runBtn = document.getElementById("runBtn");
+              const stopBtn = document.getElementById("stopBtn");
+              const statusBadge = document.getElementById("statusBadge");
+
+              runBtn.disabled = true;
+              runBtn.textContent = "Running (Reconnected)...";
+              stopBtn.disabled = false;
+              statusBadge.className = "badge bg-warning text-dark";
+              statusBadge.textContent = "Running";
+
+              // Ideally we would reconnect to the stream here, but for now we just show status
+              document.getElementById("console").innerHTML =
+                "<p class='console-line text-warning'>[INFO] Reconnecting to active session...</p>";
+              reconnectStream();
             }
+          }
+        } catch (e) {
+          console.error("Failed to check server status:", e);
+        }
+      }
 
-            async function loadProfiles() {
-              try {
-                const res = await fetch("/api/profiles");
-                const profiles = await res.json();
-                const select = document.getElementById("configProfile");
+      async function sendMessage() {
+        const input = document.getElementById("chatInput");
+        const message = input.value.trim();
+        if (!message) return;
 
-                select.innerHTML = "";
+        const history = document.getElementById("chatHistory");
 
-                if (profiles.length === 0) {
-                  const option = document.createElement("option");
-                  option.text = "No profiles found";
-                  select.add(option);
-                  return;
-                }
+        // User Message
+        const userDiv = document.createElement("div");
+        userDiv.className = "d-flex flex-column align-items-end mb-2";
+        userDiv.innerHTML = `<div class="bg-secondary text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">${escapeHtml(
+          message
+        )}</div>`;
+        history.appendChild(userDiv);
 
-                profiles.forEach((p) => {
-                  const option = document.createElement("option");
-                  option.value = p;
-                  option.text = p;
-                  if (p === "config.yaml") option.selected = true;
-                  select.add(option);
-                });
-              } catch (e) {
-                console.error("Failed to load profiles", e);
-              }
-            }
+        input.value = "";
+        history.scrollTop = history.scrollHeight;
 
-            let healthInterval = null;
+        // Get recent logs for context
+        const consoleText = document.getElementById("console").innerText;
+        const context = consoleText.slice(-2000); // Last 2000 chars
 
-            function startHealthMonitor() {
-              if (healthInterval) return; // Already running
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: message, context: context }),
+          });
+          const data = await res.json();
 
-              const updateHealth = async () => {
-                try {
-                  const res = await fetch("/api/system-health");
-                  if (!res.ok) throw new Error("Failed to fetch health data");
-                  const data = await res.json();
+          const agentDiv = document.createElement("div");
+          agentDiv.className = "d-flex flex-column align-items-start mb-2";
+          // Convert markdown-like response to simple HTML if needed, or just text
+          // For now, simple text replacement for newlines
+          const formattedResponse = escapeHtml(data.response).replace(
+            /\n/g,
+            "<br>"
+          );
+          agentDiv.innerHTML = `<div class="bg-primary text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">${formattedResponse}</div>`;
+          history.appendChild(agentDiv);
+          history.scrollTop = history.scrollHeight;
+        } catch (e) {
+          const agentDiv = document.createElement("div");
+          agentDiv.className = "d-flex flex-column align-items-start mb-2";
+          agentDiv.innerHTML = `<div class="bg-danger text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">Error: ${e.message}</div>`;
+          history.appendChild(agentDiv);
+        }
+      }
 
-                  const cpuBar = document.getElementById("cpuUsageBar");
-                  const memBar = document.getElementById("memUsageBar");
-
-                  cpuBar.style.width = data.cpu_percent + "%";
-                  cpuBar.textContent = data.cpu_percent.toFixed(1) + "%";
-
-                  memBar.style.width = data.memory_percent + "%";
-                  memBar.textContent = data.memory_percent.toFixed(1) + "%";
-                } catch (e) {
-                  console.error("Health monitor failed:", e);
-                  stopHealthMonitor(); // Stop polling on error
-                }
-              };
-
-              updateHealth(); // Initial call
-              healthInterval = setInterval(updateHealth, 2500); // Update every 2.5 seconds
-            }
-
-            function stopHealthMonitor() {
-              if (healthInterval) {
-                clearInterval(healthInterval);
-                healthInterval = null;
-              }
-            }
-
-            async function checkServerStatus() {
-              try {
-                const res = await fetch("/api/status");
-                if (res.ok) {
-                  const status = await res.json();
-                  if (status.is_running) {
-                    const runBtn = document.getElementById("runBtn");
-                    const stopBtn = document.getElementById("stopBtn");
-                    const statusBadge = document.getElementById("statusBadge");
-
-                    runBtn.disabled = true;
-                    runBtn.textContent = "Running (Reconnected)...";
-                    stopBtn.disabled = false;
-                    statusBadge.className = "badge bg-warning text-dark";
-                    statusBadge.textContent = "Running";
-
-                    // Ideally we would reconnect to the stream here, but for now we just show status
-                    document.getElementById("console").innerHTML =
-                      "<p class='console-line text-warning'>[INFO] Reconnecting to active session...</p>";
-                    reconnectStream();
-                  }
-                }
-              } catch (e) {
-                console.error("Failed to check server status:", e);
-              }
-            }
-
-            function sendMessage() {
-              const input = document.getElementById("chatInput");
-              const message = input.value.trim();
-              if (!message) return;
-
-              const history = document.getElementById("chatHistory");
-
-              // User Message
-              const userDiv = document.createElement("div");
-              userDiv.className = "d-flex flex-column align-items-end mb-2";
-              userDiv.innerHTML = `<div class="bg-secondary text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">${escapeHtml(
-                message
-              )}</div>`;
-              history.appendChild(userDiv);
-
-              input.value = "";
-              history.scrollTop = history.scrollHeight;
-
-              // Get recent logs for context
-              const consoleText = document.getElementById("console").innerText;
-              const context = consoleText.slice(-2000); // Last 2000 chars
-
-              try {
-                const res = await fetch("/api/chat", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ message: message, context: context }),
-                });
-                const data = await res.json();
-
-                const agentDiv = document.createElement("div");
-                agentDiv.className = "d-flex flex-column align-items-start mb-2";
-                // Convert markdown-like response to simple HTML if needed, or just text
-                // For now, simple text replacement for newlines
-                const formattedResponse = escapeHtml(data.response).replace(/\n/g, "<br>");
-                agentDiv.innerHTML = `<div class="bg-primary text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">${formattedResponse}</div>`;
-                history.appendChild(agentDiv);
-                history.scrollTop = history.scrollHeight;
-              } catch (e) {
-                const agentDiv = document.createElement("div");
-                agentDiv.className = "d-flex flex-column align-items-start mb-2";
-                agentDiv.innerHTML = `<div class="bg-danger text-white p-2 rounded" style="max-width: 85%; font-size: 0.9rem;">Error: ${e.message}</div>`;
-                history.appendChild(agentDiv);
-              }
-            }
-
-            // Load Config on Startup
-            window.addEventListener("DOMContentLoaded", async () => {
-              // Add listener for output tabs to start/stop health monitor
-              document
-                .querySelectorAll('#outputTabs button[data-bs-toggle="tab"]')
-                .forEach((tab) => {
-                  tab.addEventListener("shown.bs.tab", function (event) {
-                    if (event.target.id === "health-tab") startHealthMonitor();
-                    else stopHealthMonitor();
-                  });
-                });
-              checkServerStatus();
-              loadProfiles();
-              try {
-                const res = await fetch("/get-config");
-                if (res.ok) {
-                  const config = await res.json();
-                  if (config.jira_url)
-                    document.getElementById("jiraUrl").value = config.jira_url;
-                  if (config.jira_key)
-                    document.getElementById("jiraKey").value = config.jira_key;
-                  if (config.jira_auth)
-                    document.getElementById("jiraAuth").value = config.jira_auth;
-                  if (config.webhook_url)
-                    document.getElementById("webhookUrl").value = config.webhook_url;
-                }
-              } catch (e) {
-                console.error("Failed to load config:", e);
-              }
+      // Load Config on Startup
+      window.addEventListener("DOMContentLoaded", async () => {
+        // Add listener for output tabs to start/stop health monitor
+        document
+          .querySelectorAll('#outputTabs button[data-bs-toggle="tab"]')
+          .forEach((tab) => {
+            tab.addEventListener("shown.bs.tab", function (event) {
+              if (event.target.id === "health-tab") startHealthMonitor();
+              else stopHealthMonitor();
             });
+          });
+        checkServerStatus();
+        loadProfiles();
+        try {
+          const res = await fetch("/get-config");
+          if (res.ok) {
+            const config = await res.json();
+            if (config.jira_url)
+              document.getElementById("jiraUrl").value = config.jira_url;
+            if (config.jira_key)
+              document.getElementById("jiraKey").value = config.jira_key;
+            if (config.jira_auth)
+              document.getElementById("jiraAuth").value = config.jira_auth;
+            if (config.webhook_url)
+              document.getElementById("webhookUrl").value = config.webhook_url;
+            if (config.gemini_api_key)
+              document.getElementById("geminiKey").value =
+                config.gemini_api_key;
+          }
+        } catch (e) {
+          console.error("Failed to load config:", e);
+        }
+      });
     </script>
   </body>
 </html>

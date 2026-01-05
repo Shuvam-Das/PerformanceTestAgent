@@ -4,4 +4,4 @@ flask
 reportlab
 matplotlib
 psutil
-google-generativeai
+google-genai

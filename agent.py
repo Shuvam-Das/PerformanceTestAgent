@@ -11,6 +11,11 @@ import math
 import time
 from datetime import datetime
 
+try:
+    from google import genai
+except ImportError:
+    genai = None
+
 from parser import parse_input
 from generator import generate_k6_script
 from sla import evaluate_sla
@@ -109,6 +114,7 @@ class PipelineContext:
         self.summary_md = None
         self.result_files = []
         self.running_processes = []
+        self.config = {}
 
     def log_verbose(self, msg):
         if self.args.verbose:
@@ -131,6 +137,7 @@ class IngestionAgent:
                     content = f.read()
                     expanded_content = os.path.expandvars(content)
                     config_defaults = yaml.safe_load(expanded_content) or {}
+                context.config = config_defaults
             except Exception as e:
                 print(f"[WARN] Failed to load config file: {e}", flush=True)
 
@@ -593,6 +600,38 @@ class AnalysisAgent:
                 generate_pdf_report(pdf_path, report_data)
             except Exception as e:
                 print(f"[WARN] Failed to generate PDF report: {e}", flush=True)
+
+        # AI-Driven Analysis
+        ai_insights = ""
+        if genai and not context.args.dry_run:
+            api_key = os.environ.get('GEMINI_API_KEY') or context.config.get('gemini_api_key')
+            if api_key:
+                print("[STATUS] Generating AI Performance Insights...", flush=True)
+                try:
+                    client = genai.Client(api_key=api_key)
+                    
+                    # Prepare context for AI
+                    metrics_summary = {}
+                    if metrics and 'metrics' in metrics:
+                        for k in ['http_req_duration', 'http_reqs', 'http_req_failed']:
+                            if k in metrics['metrics']:
+                                metrics_summary[k] = metrics['metrics'][k]['values']
+
+                    prompt = f"""
+                    Analyze these load test results and provide a brief performance assessment.
+                    
+                    SLA Verdicts: {json.dumps(context.sla_results, indent=2)}
+                    Key Metrics: {json.dumps(metrics_summary, indent=2)}
+                    
+                    Provide:
+                    1. A 1-sentence executive summary.
+                    2. Top 3 observations/recommendations.
+                    """
+                    response = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+                    print(f"[INFO] AI Insights Generated:\n{response.text}", flush=True)
+                    ai_insights = f"\n## 🤖 AI Insights\n{response.text}\n"
+                except Exception as e:
+                    print(f"[WARN] AI Analysis failed: {e}", flush=True)
 
         # Final Summary
         sla_verdict_str = str(context.sla_results['pass']) if not context.args.dry_run else "N/A (Dry Run)"
