@@ -15,7 +15,7 @@ from sla import evaluate_sla
 from report_generator import generate_pdf_report
 
 def compare_results(folder1, folder2):
-    print(f"[STATUS] Comparing results: {folder1} vs {folder2}")
+    print(f"[STATUS] Comparing results: {folder1} vs {folder2}", flush=True)
     
     def load_metrics(folder):
         # Check direct path
@@ -26,14 +26,14 @@ def compare_results(folder1, folder2):
             if os.path.exists(alt_path):
                 path = alt_path
             else:
-                print(f"[ERROR] Summary file not found in {folder} or ./results/{folder}")
+                print(f"[ERROR] Summary file not found in {folder} or ./results/{folder}", flush=True)
                 sys.exit(1)
         
         try:
             with open(path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[ERROR] Failed to load summary from {path}: {e}")
+            print(f"[ERROR] Failed to load summary from {path}: {e}", flush=True)
             sys.exit(1)
 
     m1 = load_metrics(folder1)
@@ -68,15 +68,15 @@ def compare_results(folder1, folder2):
         lines.append(f"| {label:<25} | {v1:<15.4f} | {v2:<15.4f} | {diff:<+10.4f} ({pct:+.2f}%) |")
 
     report = "\n".join(lines)
-    print(report)
+    print(report, flush=True)
 
     output_path = "comparison_report.md"
     try:
         with open(output_path, 'w') as f:
             f.write(report)
-        print(f"\n[STATUS] Comparison report saved to {output_path}")
+        print(f"\n[STATUS] Comparison report saved to {output_path}", flush=True)
     except Exception as e:
-        print(f"[ERROR] Failed to save comparison report: {e}")
+        print(f"[ERROR] Failed to save comparison report: {e}", flush=True)
 
 def sanitize_dict(d):
     if not isinstance(d, dict):
@@ -110,11 +110,11 @@ class PipelineContext:
 
     def log_verbose(self, msg):
         if self.args.verbose:
-            print(f"[VERBOSE] {msg}")
+            print(f"[VERBOSE] {msg}", flush=True)
 
 class IngestionAgent:
     def run(self, context: PipelineContext):
-        print("[STATUS] Stage: Input Ingestion")
+        print("[STATUS] Stage: Input Ingestion", flush=True)
         
         # Determine config file path
         config_file = context.args.config
@@ -130,7 +130,7 @@ class IngestionAgent:
                     expanded_content = os.path.expandvars(content)
                     config_defaults = yaml.safe_load(expanded_content) or {}
             except Exception as e:
-                print(f"[WARN] Failed to load config file: {e}")
+                print(f"[WARN] Failed to load config file: {e}", flush=True)
 
         # Helper to resolve argument (CLI > Config > Default)
         def get_arg(name, default=None):
@@ -146,14 +146,14 @@ class IngestionAgent:
 
         # Setup Directory
         if context.args.clean and os.path.exists(context.args.output_dir):
-            print(f"[STATUS] Cleaning output directory: {context.args.output_dir}")
+            print(f"[STATUS] Cleaning output directory: {context.args.output_dir}", flush=True)
             shutil.rmtree(context.args.output_dir)
 
         context.timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         context.result_dir = os.path.join(context.args.output_dir, context.timestamp)
         os.makedirs(context.result_dir, exist_ok=True)
 
-        print(f"[STATUS] Starting Agent. Results: {context.result_dir}")
+        print(f"[STATUS] Starting Agent. Results: {context.result_dir}", flush=True)
 
         # Determine input source
         final_jira = None
@@ -188,8 +188,8 @@ class IngestionAgent:
         diagnostics = parse_res['diagnostics']
 
         if not context.inputs and diagnostics:
-            print("Unable to understand requirements")
-            print(json.dumps(diagnostics, indent=2))
+            print("Unable to understand requirements", flush=True)
+            print(json.dumps(diagnostics, indent=2), flush=True)
             sys.exit(1)
 
         context.log_verbose(f"Parsed Input Keys: {list(context.inputs.keys()) if context.inputs else 'None'}")
@@ -198,16 +198,16 @@ class IngestionAgent:
             json.dump(context.inputs, f, indent=2)
 
         # API Collection Validation
-        print("[STATUS] Stage: API Collection Validation")
+        print("[STATUS] Stage: API Collection Validation", flush=True)
         if not context.inputs.get('api_collection'):
-            print("Human Intervention Required: API collection missing")
+            print("Human Intervention Required: API collection missing", flush=True)
             sys.exit(1)
         
-        print(f"[STATUS] API Collection detected: {list(context.inputs['api_collection'].keys())[0]}")
+        print(f"[STATUS] API Collection detected: {list(context.inputs['api_collection'].keys())[0]}", flush=True)
 
 class GeneratorAgent:
     def run(self, context: PipelineContext):
-        print("[STATUS] Stage: k6 Script Generation")
+        print("[STATUS] Stage: k6 Script Generation", flush=True)
         script_content = generate_k6_script(context.inputs)
         context.log_verbose(f"Generated script size: {len(script_content)} bytes")
         context.script_path = os.path.join(context.result_dir, 'script.js')
@@ -216,43 +216,43 @@ class GeneratorAgent:
 
 class ValidationAgent:
     def run(self, context: PipelineContext):
-        print("[STATUS] Stage: Script Validation")
+        print("[STATUS] Stage: Script Validation", flush=True)
         # ESLint
         try:
-            cmd = f'npx eslint "{context.script_path}"'
-            context.log_verbose(f"Executing: {cmd}")
-            lint_res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            cmd = ['npx', 'eslint', context.script_path]
+            context.log_verbose(f"Executing: {' '.join(cmd)}")
+            lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
             if lint_res.returncode != 0:
-                print("Unable to understand requirements")
-                print("Diagnostics: Generated script failed linting.")
-                print(lint_res.stdout)
-                with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w') as f:
+                print("Unable to understand requirements", flush=True)
+                print("Diagnostics: Generated script failed linting.", flush=True)
+                print(lint_res.stdout, flush=True)
+                with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
                     f.write(lint_res.stdout)
                 sys.exit(1)
         except Exception as e:
-            print(f"[WARN] Linting skipped or failed to run: {e}")
+            print(f"[WARN] Linting skipped or failed to run: {e}", flush=True)
 
         # Smoke Run
-        print("[STATUS] Stage: Smoke Run")
-        cmd = f'k6 run --vus 1 --duration 1s "{context.script_path}"'
-        context.log_verbose(f"Executing: {cmd}")
-        smoke_res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w') as f:
+        print("[STATUS] Stage: Smoke Run", flush=True)
+        cmd = ['k6', 'run', '--vus', '1', '--duration', '1s', context.script_path]
+        context.log_verbose(f"Executing: {' '.join(cmd)}")
+        smoke_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
+        with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w', encoding='utf-8') as f:
             f.write(smoke_res.stdout + smoke_res.stderr)
         
         if smoke_res.returncode != 0:
-            print("Unable to understand requirements")
-            print("Diagnostics: Script smoke run failed.")
+            print("Unable to understand requirements", flush=True)
+            print("Diagnostics: Script smoke run failed.", flush=True)
             sys.exit(1)
 
         # Workload Scenario Check
         if not context.inputs.get('workload_scenario'):
-            print("[INFO] No workload scenario provided. Using defaults/TODOs.")
+            print("[INFO] No workload scenario provided. Using defaults/TODOs.", flush=True)
 
         # SLA Check
-        print("[STATUS] Stage: SLA Check")
+        print("[STATUS] Stage: SLA Check", flush=True)
         if not context.inputs.get('sla'):
-            print("Human Intervention Required: SLA missing")
+            print("Human Intervention Required: SLA missing", flush=True)
             sys.exit(1)
 
 class ExecutionAgent:
@@ -264,10 +264,10 @@ class ExecutionAgent:
         context.running_processes = []
         
         if not context.args.dry_run:
-            print("[STATUS] Stage: Full Test Execution")
+            print("[STATUS] Stage: Full Test Execution", flush=True)
             
             if context.args.parallel and context.args.parallel > 1:
-                print(f"[STATUS] Parallel Execution: Spawning {context.args.parallel} Docker containers")
+                print(f"[STATUS] Parallel Execution: Spawning {context.args.parallel} Docker containers", flush=True)
                 procs = []
                 abs_result_dir = os.path.abspath(context.result_dir)
                 
@@ -299,13 +299,22 @@ class ExecutionAgent:
                 
             else:
                 # Local sequential execution
-                cmd = f'k6 run --out json="{context.summary_path}" --summary-export="{context.summary_export_path}" "{context.script_path}"'
+                cmd = [
+                    'k6', 'run',
+                    '--out', f"json={context.summary_path}",
+                    '--summary-export', context.summary_export_path,
+                    context.script_path
+                ]
                 context.result_files.append(context.summary_path)
-                context.log_verbose(f"Executing: {cmd}")
+                context.log_verbose(f"Executing: {' '.join(cmd)}")
                 # Start process
-                context.running_processes.append(subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+                try:
+                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
+                except FileNotFoundError:
+                    print("[ERROR] k6 executable not found. Please ensure k6 is installed and in your PATH.", flush=True)
+                    sys.exit(1)
         else:
-            print("[STATUS] Dry Run: Skipping full test execution.")
+            print("[STATUS] Dry Run: Skipping full test execution.", flush=True)
             with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
                 json.dump({"status": "skipped", "reason": "dry-run"}, f, indent=2)
 
@@ -321,7 +330,7 @@ class MonitoringAgent:
         if not context.running_processes:
             return
 
-        print(f"[STATUS] Stage: Monitoring {len(context.running_processes)} active process(es)")
+        print(f"[STATUS] Stage: Monitoring {len(context.running_processes)} active process(es)", flush=True)
         
         if context.inputs.get('sla') and 'http_req_failed_rate_max' in context.inputs['sla']:
             self.error_rate_threshold = context.inputs['sla']['http_req_failed_rate_max']
@@ -332,7 +341,7 @@ class MonitoringAgent:
                 if not line: break
                 clean_line = line.strip()
                 if clean_line:
-                    print(f"[{prefix}] {clean_line}")
+                    print(f"[{prefix}] {clean_line}", flush=True)
             proc.stdout.close()
 
         threads = []
@@ -363,7 +372,7 @@ class MonitoringAgent:
         for proc in context.running_processes:
             proc.wait()
             if proc.returncode != 0:
-                print(f"[ERROR] Process failed with code {proc.returncode}")
+                print(f"[ERROR] Process failed with code {proc.returncode}", flush=True)
                 sys.exit(1)
 
         # If parallel, merge results now that execution is complete
@@ -461,13 +470,13 @@ class MonitoringAgent:
 class AnalysisAgent:
     def run(self, context: PipelineContext):
         if not context.args.dry_run:
-            print("[STATUS] Stage: SLA Evaluation")
+            print("[STATUS] Stage: SLA Evaluation", flush=True)
             metrics = {}
             try:
                 with open(context.summary_export_path, 'r') as f:
                     metrics = json.load(f)
             except Exception as e:
-                print("[ERROR] Failed to read test summary.")
+                print("[ERROR] Failed to read test summary.", flush=True)
 
             context.log_verbose(f"Evaluating SLA against metrics: {list(metrics.get('metrics', {}).keys())}")
             context.sla_results = evaluate_sla(metrics, context.inputs['sla'])
@@ -476,7 +485,7 @@ class AnalysisAgent:
                 json.dump(context.sla_results, f, indent=2)
 
             # Generate PDF Report
-            print("[STATUS] Stage: PDF Report Generation")
+            print("[STATUS] Stage: PDF Report Generation", flush=True)
             pdf_path = os.path.join(context.result_dir, 'report.pdf')
             report_data = {
                 'timestamp': context.timestamp,
@@ -488,7 +497,7 @@ class AnalysisAgent:
             try:
                 generate_pdf_report(pdf_path, report_data)
             except Exception as e:
-                print(f"[WARN] Failed to generate PDF report: {e}")
+                print(f"[WARN] Failed to generate PDF report: {e}", flush=True)
 
         # Final Summary
         sla_verdict_str = str(context.sla_results['pass']) if not context.args.dry_run else "N/A (Dry Run)"
@@ -518,20 +527,20 @@ class AnalysisAgent:
         with open(os.path.join(context.result_dir, 'summary.md'), 'w') as f:
             f.write(context.summary_md)
 
-        print("[STATUS] Pipeline Complete.")
-        print(f"Artifacts saved in: {context.result_dir}")
+        print("[STATUS] Pipeline Complete.", flush=True)
+        print(f"Artifacts saved in: {context.result_dir}", flush=True)
         if not context.args.dry_run:
             if not context.sla_results['pass']:
-                print("[WARN] SLA Failed.")
+                print("[WARN] SLA Failed.", flush=True)
             else:
-                print("[SUCCESS] SLA Passed.")
+                print("[SUCCESS] SLA Passed.", flush=True)
         else:
-            print("[SUCCESS] Dry Run Complete.")
+            print("[SUCCESS] Dry Run Complete.", flush=True)
 
 class NotificationAgent:
     def run(self, context: PipelineContext):
         if context.args.notify:
-            print(f"[STATUS] Sending notification to {context.args.notify}")
+            print(f"[STATUS] Sending notification to {context.args.notify}", flush=True)
             try:
                 # Determine message urgency based on SLA
                 if context.sla_results and not context.sla_results.get('pass', True):
@@ -549,25 +558,25 @@ class NotificationAgent:
                             data = {'text': message_text, 'payload_json': json.dumps({'content': message_text})}
                             resp = requests.post(context.args.notify, files=files, data=data, timeout=30)
                             if 200 <= resp.status_code < 300:
-                                print("[SUCCESS] Notification sent with PDF attachment.")
+                                print("[SUCCESS] Notification sent with PDF attachment.", flush=True)
                                 sent = True
                     except Exception as e:
-                        print(f"[WARN] Failed to send attachment: {e}")
+                        print(f"[WARN] Failed to send attachment: {e}", flush=True)
 
                 # Fallback to text-only
                 if not sent:
                     payload = {"text": message_text}
                     resp = requests.post(context.args.notify, json=payload, timeout=10)
                     if 200 <= resp.status_code < 300:
-                        print("[SUCCESS] Notification sent (text only).")
+                        print("[SUCCESS] Notification sent (text only).", flush=True)
                     else:
-                        print(f"[WARN] Notification failed: {resp.status_code} {resp.text}")
+                        print(f"[WARN] Notification failed: {resp.status_code} {resp.text}", flush=True)
             except Exception as e:
-                print(f"[WARN] Notification failed: {e}")
+                print(f"[WARN] Notification failed: {e}", flush=True)
 
 class CleanupAgent:
     def run(self, context: PipelineContext):
-        print("[STATUS] Stage: Cleanup Check")
+        print("[STATUS] Stage: Cleanup Check", flush=True)
         threshold = context.args.cleanup_threshold
         output_dir = context.args.output_dir
         
@@ -578,7 +587,7 @@ class CleanupAgent:
         percent_used = (used / total) * 100
         
         if percent_used > threshold:
-            print(f"[WARN] Disk usage {percent_used:.2f}% exceeds threshold {threshold}%. Archiving old results...")
+            print(f"[WARN] Disk usage {percent_used:.2f}% exceeds threshold {threshold}%. Archiving old results...", flush=True)
             
             # List subdirs, sort by modification time (oldest first)
             subdirs = [os.path.join(output_dir, d) for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
@@ -590,7 +599,7 @@ class CleanupAgent:
                 
                 shutil.make_archive(d, 'zip', d)
                 shutil.rmtree(d)
-                print(f"[INFO] Archived and deleted {d}")
+                print(f"[INFO] Archived and deleted {d}", flush=True)
                 
                 # Check usage again
                 _, used, _ = shutil.disk_usage(output_dir)

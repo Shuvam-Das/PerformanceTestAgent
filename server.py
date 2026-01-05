@@ -22,7 +22,7 @@ def index():
 
 @app.route('/results/<path:filename>')
 def results(filename):
-    results_dir = os.path.join(os.getcwd(), 'results')
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
     return send_from_directory(results_dir, filename)
 
 @app.route('/run', methods=['POST'])
@@ -153,7 +153,7 @@ def compare():
 
 @app.route('/api/history')
 def history():
-    res_dir = os.path.join(os.getcwd(), 'results')
+    res_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
     if not os.path.exists(res_dir):
         return jsonify([])
     
@@ -172,7 +172,7 @@ def delete_run():
     if not folders:
         return jsonify({'error': 'No folders specified'}), 400
     
-    base_dir = os.path.join(os.getcwd(), 'results')
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
     deleted = []
     
     for folder in folders:
@@ -198,7 +198,7 @@ def list_profiles():
 
 @app.route('/api/download/<path:foldername>')
 def download_folder(foldername):
-    res_dir = os.path.join(os.getcwd(), 'results', foldername)
+    res_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results', foldername)
     if not os.path.exists(res_dir):
         return jsonify({'error': 'Folder not found'}), 404
         

@@ -329,6 +329,17 @@
                       Live Logs
                     </button>
                   </li>
+                  <li class="nav-item">
+                    <button
+                      class="nav-link"
+                      id="health-tab"
+                      data-bs-toggle="tab"
+                      data-bs-target="#health-pane"
+                      type="button"
+                    >
+                      System Health
+                    </button>
+                  </li>
                 </ul>
                 <span id="statusBadge" class="badge bg-secondary">Idle</span>
               </div>
@@ -349,83 +360,42 @@
                   id="live-pane"
                   style="overflow-y: auto"
                 >
-                  <div class="row">
-                    <div class="col-12 mb-3">
                   <div class="row g-3">
-                    <!-- System Health Section -->
-                    <div class="col-md-4">
-                      <div class="card h-100">
-                        <div class="card-header bg-light py-2"><strong>System Health</strong></div>
-                        <div class="card-body">
-                          <h6 class="small mb-1">CPU Usage</h6>
-                          <div class="progress mb-3" style="height: 20px">
-                            <div id="cpuUsageBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
-                          </div>
-                          <h6 class="small mb-1">Memory Usage</h6>
-                          <div class="progress" style="height: 20px">
-                            <div id="memUsageBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Live Metrics Charts -->
-                    <div class="col-md-8">
-                      <div class="mb-3" style="height: 180px;">
+                    <div class="col-12">
                       <canvas
                         id="liveLatencyChart"
                         style="max-height: 180px"
-                        style="max-height: 100%; width: 100%;"
                       ></canvas>
-                      </div>
                     </div>
-                    
-                    <div class="col-12"><hr class="my-2"></div>
-
                     <div class="col-12">
                       <canvas
                         id="liveRpsChart"
                         style="max-height: 180px"
                       ></canvas>
                     </div>
-                    <div class="col-12">
-                      <canvas
-                        id="liveVUsChart"
-                        style="max-height: 180px"
-                      ></canvas>
+                  </div>
+                </div>
+                <!-- System Health Pane -->
+                <div class="tab-pane fade p-3" id="health-pane">
+                  <h6 class="mb-2">CPU Usage</h6>
+                  <div class="progress mb-4" style="height: 25px">
+                    <div
+                      id="cpuUsageBar"
+                      class="progress-bar"
+                      role="progressbar"
+                    >
+                      0%
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-            <div class="card-footer bg-light">
-              <div class="row align-items-center">
-                <div class="col-md-6 border-end">
-                  <h6 class="small mb-1">CPU Usage</h6>
-                  <div class="progress" style="height: 15px">
-                    <div id="cpuUsageBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <h6 class="small mb-1">Memory Usage</h6>
-                  <div class="progress" style="height: 15px">
-                    <div id="memUsageBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="card-footer bg-light">
-              <div class="row align-items-center">
-                <div class="col-md-6 border-end">
-                  <h6 class="small mb-1">CPU Usage</h6>
-                  <div class="progress" style="height: 15px">
-                    <div id="cpuUsageBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <h6 class="small mb-1">Memory Usage</h6>
-                  <div class="progress" style="height: 15px">
-                    <div id="memUsageBar" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
+                  <h6 class="mb-2">Memory Usage</h6>
+                  <div class="progress" style="height: 25px">
+                    <div
+                      id="memUsageBar"
+                      class="progress-bar bg-success"
+                      role="progressbar"
+                    >
+                      0%
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1494,19 +1464,12 @@ output_dir: "./results"
 
       // Load Config on Startup
       window.addEventListener("DOMContentLoaded", async () => {
-        document
-          .querySelectorAll('#inputTabs button[data-bs-toggle="tab"]')
-          .forEach((tab) => {
-            // Remove health monitor trigger from input tabs since it's now in output panel
-          });
-
         // Add listener for output tabs to start/stop health monitor
         document
           .querySelectorAll('#outputTabs button[data-bs-toggle="tab"]')
           .forEach((tab) => {
             tab.addEventListener("shown.bs.tab", function (event) {
               if (event.target.id === "health-tab") startHealthMonitor();
-              if (event.target.id === "live-tab") startHealthMonitor();
               else stopHealthMonitor();
             });
           });
