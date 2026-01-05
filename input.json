@@ -1,0 +1,35 @@
+{
+  "api_collection": {
+    "endpoints": [
+      {
+        "method": "GET",
+        "url": "/users?page=2",
+        "name": "List Users"
+      },
+      {
+        "method": "POST",
+        "url": "/users",
+        "body": {
+          "name": "Neo",
+          "job": "The One"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "name": "Create User"
+      }
+    ]
+  },
+  "workload_scenario": {
+    "executor": "constant-vus",
+    "vus": 5,
+    "duration": "10s"
+  },
+  "sla": {
+    "http_req_duration_p95_ms": 500,
+    "http_req_failed_rate_max": 0.01
+  },
+  "env": {
+    "base_url": "https://reqres.in/api"
+  }
+}
