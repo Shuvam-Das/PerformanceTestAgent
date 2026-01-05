@@ -219,7 +219,7 @@ class ValidationAgent:
         print("[STATUS] Stage: Script Validation", flush=True)
         # ESLint
         try:
-            cmd = ['npx', 'eslint', context.script_path]
+            cmd = ['npx', 'eslint', '--fix', context.script_path]
             context.log_verbose(f"Executing: {' '.join(cmd)}")
             lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
             if lint_res.returncode != 0:

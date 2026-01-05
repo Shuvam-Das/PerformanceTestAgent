@@ -15,6 +15,7 @@ from threading import Timer
 app = Flask(__name__)
 
 current_process = None
+server_state = {'is_running': False}
 
 @app.route('/')
 def index():
@@ -28,6 +29,7 @@ def results(filename):
 @app.route('/run', methods=['POST'])
 def run():
     global current_process
+    global server_state
     data = request.json
     mode = data.get('mode')
     jira = data.get('jira', {})
@@ -39,6 +41,8 @@ def run():
     webhook_url = data.get('webhookUrl')
     cleanup_threshold = data.get('cleanupThreshold')
     parallel = data.get('parallel')
+
+    server_state['is_running'] = True
 
     def generate():
         # Use the current python executable to run the agent
@@ -84,6 +88,7 @@ def run():
 
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUNBUFFERED"] = "1"
 
         # Run agent as subprocess
         # Merge stderr into stdout to simplify streaming
@@ -106,6 +111,7 @@ def run():
         
         proc.wait()
         current_process = None
+        server_state['is_running'] = False
 
         # Cleanup
         if temp_file and os.path.exists(temp_file):
@@ -118,10 +124,17 @@ def run():
 @app.route('/stop', methods=['POST'])
 def stop():
     global current_process
+    global server_state
     if current_process and current_process.poll() is None:
         current_process.terminate()
+        server_state['is_running'] = False
         return jsonify({'status': 'success', 'message': 'Pipeline execution stopped.'})
     return jsonify({'status': 'error', 'message': 'No running pipeline found.'})
+
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    global server_state
+    return jsonify(server_state)
 
 @app.route('/compare', methods=['POST'])
 def compare():
@@ -134,11 +147,17 @@ def compare():
 
     def generate():
         cmd = [sys.executable, '-u', 'agent.py', '--compare', folder1, folder2]
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUNBUFFERED"] = "1"
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding='utf-8',
+            errors='replace',
+            env=env,
             bufsize=1,
             universal_newlines=True
         )

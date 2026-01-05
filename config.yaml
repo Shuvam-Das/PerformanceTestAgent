@@ -1,4 +1,0 @@
-jira_url: "https://example.atlassian.net"
-jira_key: "PROJ-101"
-jira_auth: "${JIRA_AUTH_TOKEN}"
-output_dir: "./results"

@@ -423,6 +423,20 @@
                 class="btn btn-sm btn-outline-danger"
                 >PDF Report</a
               >
+              <button
+                onclick="viewLog('lint_report.txt')"
+                class="btn btn-sm btn-outline-warning ms-2"
+                id="lintLogBtn"
+              >
+                Lint Log
+              </button>
+              <button
+                onclick="viewLog('smoke_run_output.txt')"
+                class="btn btn-sm btn-outline-info"
+                id="smokeLogBtn"
+              >
+                Smoke Log
+              </button>
             </div>
           </div>
         </div>
@@ -455,6 +469,44 @@
               class="p-3 bg-light border rounded"
               style="white-space: pre-wrap"
             ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Viewer Modal -->
+    <div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+      <div
+        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+      >
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="logModalTitle">Log Viewer</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body bg-dark text-light">
+            <pre
+              id="logContent"
+              style="
+                white-space: pre-wrap;
+                font-family: monospace;
+                font-size: 0.85rem;
+              "
+            ></pre>
+          </div>
+          <div class="modal-footer bg-dark border-top-0">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-light"
+              onclick="downloadLog()"
+            >
+              Download Log
+            </button>
           </div>
         </div>
       </div>
@@ -665,6 +717,8 @@
         const stopBtn = document.getElementById("stopBtn");
         const statusBadge = document.getElementById("statusBadge");
         const resultLinks = document.getElementById("resultLinks");
+        const lintLogBtn = document.getElementById("lintLogBtn");
+        const smokeLogBtn = document.getElementById("smokeLogBtn");
 
         // Client-side Validation
         if (mode === "file") {
@@ -775,6 +829,10 @@
                     document.getElementById(
                       "pdfLink"
                     ).href = `/${urlPath}/report.pdf`;
+
+                    // Store current result path for log viewer
+                    window.currentResultPath = urlPath;
+
                     resultLinks.style.display = "block";
                   }
                 } else if (data.type === "done") {
@@ -794,6 +852,46 @@
           runBtn.disabled = false;
           runBtn.textContent = "Run Pipeline";
           stopBtn.disabled = true;
+        }
+      }
+
+      function downloadLog() {
+        const content = document.getElementById("logContent").textContent;
+        const title = document.getElementById("logModalTitle").textContent;
+        if (!content) return;
+
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = title || "log.txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      async function viewLog(filename) {
+        if (!window.currentResultPath) {
+          alert("No active result found.");
+          return;
+        }
+
+        const modalEl = document.getElementById("logModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const title = document.getElementById("logModalTitle");
+        const content = document.getElementById("logContent");
+
+        title.textContent = filename;
+        content.textContent = "Loading...";
+        modal.show();
+
+        try {
+          const res = await fetch(`/${window.currentResultPath}/${filename}`);
+          if (!res.ok) throw new Error("Log file not found");
+          content.textContent = await res.text();
+        } catch (e) {
+          content.textContent = "Error loading log: " + e.message;
         }
       }
 
@@ -1462,6 +1560,31 @@ output_dir: "./results"
         }
       }
 
+      async function checkServerStatus() {
+        try {
+          const res = await fetch("/api/status");
+          if (res.ok) {
+            const status = await res.json();
+            if (status.is_running) {
+              const runBtn = document.getElementById("runBtn");
+              const stopBtn = document.getElementById("stopBtn");
+              const statusBadge = document.getElementById("statusBadge");
+              
+              runBtn.disabled = true;
+              runBtn.textContent = "Running (Reconnected)...";
+              stopBtn.disabled = false;
+              statusBadge.className = "badge bg-warning text-dark";
+              statusBadge.textContent = "Running";
+              
+              // Ideally we would reconnect to the stream here, but for now we just show status
+              document.getElementById("console").innerHTML += "<p class='console-line text-warning'>[INFO] Test is currently running in background. Logs may not be fully synchronized after refresh.</p>";
+            }
+          }
+        } catch (e) {
+          console.error("Failed to check server status:", e);
+        }
+      }
+
       // Load Config on Startup
       window.addEventListener("DOMContentLoaded", async () => {
         // Add listener for output tabs to start/stop health monitor
@@ -1473,6 +1596,7 @@ output_dir: "./results"
               else stopHealthMonitor();
             });
           });
+        checkServerStatus();
         loadProfiles();
         try {
           const res = await fetch("/get-config");
