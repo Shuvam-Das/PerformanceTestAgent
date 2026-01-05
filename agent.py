@@ -30,7 +30,6 @@ def compare_results(folder1, folder2):
                 sys.exit(1)
         
         try:
-            with open(path, 'r', encoding='utf-8') as f:
             with open(path, 'r') as f:
                 return json.load(f)
         except Exception as e:
@@ -73,7 +72,6 @@ def compare_results(folder1, folder2):
 
     output_path = "comparison_report.md"
     try:
-        with open(output_path, 'w', encoding='utf-8') as f:
         with open(output_path, 'w') as f:
             f.write(report)
         print(f"\n[STATUS] Comparison report saved to {output_path}")
@@ -127,7 +125,6 @@ class IngestionAgent:
         config_defaults = {}
         if os.path.exists(config_file):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
                 with open(config_file, 'r') as f:
                     content = f.read()
                     expanded_content = os.path.expandvars(content)
@@ -197,7 +194,6 @@ class IngestionAgent:
 
         context.log_verbose(f"Parsed Input Keys: {list(context.inputs.keys()) if context.inputs else 'None'}")
 
-        with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'w', encoding='utf-8') as f:
         with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'w') as f:
             json.dump(context.inputs, f, indent=2)
 
@@ -215,7 +211,6 @@ class GeneratorAgent:
         script_content = generate_k6_script(context.inputs)
         context.log_verbose(f"Generated script size: {len(script_content)} bytes")
         context.script_path = os.path.join(context.result_dir, 'script.js')
-        with open(context.script_path, 'w', encoding='utf-8') as f:
         with open(context.script_path, 'w') as f:
             f.write(script_content)
 
@@ -224,16 +219,13 @@ class ValidationAgent:
         print("[STATUS] Stage: Script Validation")
         # ESLint
         try:
-            cmd = ['npx', 'eslint', context.script_path]
             cmd = f'npx eslint "{context.script_path}"'
             context.log_verbose(f"Executing: {cmd}")
-            lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
             lint_res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             if lint_res.returncode != 0:
                 print("Unable to understand requirements")
                 print("Diagnostics: Generated script failed linting.")
                 print(lint_res.stdout)
-                with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
                 with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w') as f:
                     f.write(lint_res.stdout)
                 sys.exit(1)
@@ -242,11 +234,8 @@ class ValidationAgent:
 
         # Smoke Run
         print("[STATUS] Stage: Smoke Run")
-        cmd = ['k6', 'run', '--vus', '1', '--duration', '1s', context.script_path]
         cmd = f'k6 run --vus 1 --duration 1s "{context.script_path}"'
         context.log_verbose(f"Executing: {cmd}")
-        smoke_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
-        with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w', encoding='utf-8') as f:
         smoke_res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w') as f:
             f.write(smoke_res.stdout + smoke_res.stderr)
@@ -306,26 +295,17 @@ class ExecutionAgent:
                     
                     context.log_verbose(f"Starting container {i}: {' '.join(cmd)}")
                     # Start process, redirect stderr to stdout for unified monitoring
-                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
                     context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
                 
             else:
                 # Local sequential execution
-                cmd = [
-                    'k6', 'run',
-                    '--out', f"json={context.summary_path}",
-                    '--summary-export', context.summary_export_path,
-                    context.script_path
-                ]
                 cmd = f'k6 run --out json="{context.summary_path}" --summary-export="{context.summary_export_path}" "{context.script_path}"'
                 context.result_files.append(context.summary_path)
                 context.log_verbose(f"Executing: {cmd}")
                 # Start process
-                context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
                 context.running_processes.append(subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
         else:
             print("[STATUS] Dry Run: Skipping full test execution.")
-            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w', encoding='utf-8') as f:
             with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
                 json.dump({"status": "skipped", "reason": "dry-run"}, f, indent=2)
 
@@ -442,7 +422,6 @@ class MonitoringAgent:
         
         if not os.path.exists(file_path): return
 
-        with open(file_path, 'r', encoding='utf-8') as f:
         with open(file_path, 'r') as f:
             while not stop_event.is_set():
                 line = f.readline()
@@ -489,7 +468,6 @@ class MonitoringAgent:
             path = os.path.join(result_dir, f"summary_export_{i}.json")
             if not os.path.exists(path): continue
             
-            with open(path, 'r', encoding='utf-8') as f:
             with open(path, 'r') as f:
                 data = json.load(f)
             
@@ -517,7 +495,6 @@ class MonitoringAgent:
                     m_val['count'] += d_val.get('count', 0)
                     m_val['rate'] += d_val.get('rate', 0)
 
-        with open(output_path, 'w', encoding='utf-8') as f:
         with open(output_path, 'w') as f:
             json.dump(merged, f, indent=2)
 
@@ -527,7 +504,6 @@ class AnalysisAgent:
             print("[STATUS] Stage: SLA Evaluation")
             metrics = {}
             try:
-                with open(context.summary_export_path, 'r', encoding='utf-8') as f:
                 with open(context.summary_export_path, 'r') as f:
                     metrics = json.load(f)
             except Exception as e:
@@ -536,7 +512,6 @@ class AnalysisAgent:
             context.log_verbose(f"Evaluating SLA against metrics: {list(metrics.get('metrics', {}).keys())}")
             context.sla_results = evaluate_sla(metrics, context.inputs['sla'])
             context.log_verbose(f"SLA Results: {json.dumps(context.sla_results, indent=2)}")
-            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w', encoding='utf-8') as f:
             with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
                 json.dump(context.sla_results, f, indent=2)
 
@@ -580,7 +555,6 @@ class AnalysisAgent:
 - Results
 - PDF Report
 """
-        with open(os.path.join(context.result_dir, 'summary.md'), 'w', encoding='utf-8') as f:
         with open(os.path.join(context.result_dir, 'summary.md'), 'w') as f:
             f.write(context.summary_md)
 
