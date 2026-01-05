@@ -78,6 +78,22 @@ def compare_results(folder1, folder2):
     except Exception as e:
         print(f"[ERROR] Failed to save comparison report: {e}")
 
+def sanitize_dict(d):
+    if not isinstance(d, dict):
+        return d
+    
+    sanitized = {}
+    for k, v in d.items():
+        if any(s in k.lower() for s in ['auth', 'token', 'secret', 'password']):
+            sanitized[k] = '****'
+        elif isinstance(v, dict):
+            sanitized[k] = sanitize_dict(v)
+        elif isinstance(v, list):
+            sanitized[k] = [sanitize_dict(i) for i in v]
+        else:
+            sanitized[k] = v
+    return sanitized
+
 class PipelineContext:
     def __init__(self, args):
         self.args = args
@@ -165,7 +181,7 @@ class IngestionAgent:
             "jira": final_jira,
             "file": final_file
         }
-        context.log_verbose(f"Configuration: {json.dumps({k:v for k,v in config.items() if k != 'jira' or not v}, default=str)}")
+        context.log_verbose(f"Configuration: {json.dumps(sanitize_dict(config), default=str)}")
 
         parse_res = parse_input(config)
         context.inputs = parse_res['result']
