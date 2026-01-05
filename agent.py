@@ -8,6 +8,7 @@ import yaml
 import requests
 import threading
 import math
+import time
 from datetime import datetime
 
 from parser import parse_input
@@ -189,8 +190,11 @@ class IngestionAgent:
         diagnostics = parse_res['diagnostics']
 
         if not context.inputs and diagnostics:
-            print("Unable to understand requirements", flush=True)
-            print(json.dumps(diagnostics, indent=2), flush=True)
+            print("\n[AGENT] I'm having trouble understanding your input. Here's what I found:", flush=True)
+            for diag in diagnostics:
+                print(f"  - Issue at {diag.get('path', 'unknown')}: {diag.get('reason', 'Unknown error')}", flush=True)
+            print("\n[AGENT] Please check your input format. I support JSON, YAML, Jira keys, HAR files, and Curl commands.", flush=True)
+            print("[AGENT] If you're using a file, make sure the path is correct and the content is valid.", flush=True)
             sys.exit(1)
 
         context.log_verbose(f"Parsed Input Keys: {list(context.inputs.keys()) if context.inputs else 'None'}")
@@ -201,7 +205,9 @@ class IngestionAgent:
         # API Collection Validation
         print("[STATUS] Stage: API Collection Validation", flush=True)
         if not context.inputs.get('api_collection'):
-            print("Human Intervention Required: API collection missing", flush=True)
+            print("\n[AGENT] I couldn't find any API endpoints to test.", flush=True)
+            print("[AGENT] Please provide an 'api_collection' in your input, or a list of endpoints.", flush=True)
+            print("[AGENT] Example: { \"api_collection\": { \"endpoints\": [...] } }", flush=True)
             sys.exit(1)
         
         print(f"[STATUS] API Collection detected: {list(context.inputs['api_collection'].keys())[0]}", flush=True)
@@ -240,9 +246,10 @@ class ValidationAgent:
             context.log_verbose(f"Executing: {' '.join(cmd)}")
             lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
             if lint_res.returncode != 0:
-                print("Unable to understand requirements", flush=True)
-                print("Diagnostics: Generated script failed linting.", flush=True)
+                print("\n[AGENT] The generated script has some issues.", flush=True)
+                print("[AGENT] I tried to fix them automatically, but some errors remain:", flush=True)
                 print(lint_res.stdout, flush=True)
+                print("[AGENT] This might be due to invalid characters or structure in your input data.", flush=True)
                 with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
                     f.write(lint_res.stdout)
                 sys.exit(1)
@@ -258,8 +265,9 @@ class ValidationAgent:
             f.write(smoke_res.stdout + smoke_res.stderr)
         
         if smoke_res.returncode != 0:
-            print("Unable to understand requirements", flush=True)
-            print("Diagnostics: Script smoke run failed.", flush=True)
+            print("\n[AGENT] The test script failed during a quick smoke test.", flush=True)
+            print("[AGENT] This usually means there's a runtime error in the script logic.", flush=True)
+            print("[AGENT] Please check the 'Smoke Log' artifact for detailed error messages.", flush=True)
             sys.exit(1)
 
         # Workload Scenario Check
@@ -269,7 +277,8 @@ class ValidationAgent:
         # SLA Check
         print("[STATUS] Stage: SLA Check", flush=True)
         if not context.inputs.get('sla'):
-            print("Human Intervention Required: SLA missing", flush=True)
+            print("\n[AGENT] I need to know your success criteria (SLA) to run the test.", flush=True)
+            print("[AGENT] Please add an 'sla' section to your input. For example: { \"sla\": { \"http_req_duration_p95_ms\": 500 } }", flush=True)
             sys.exit(1)
 
 class ExecutionAgent:
@@ -330,7 +339,8 @@ class ExecutionAgent:
                 try:
                     context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
                 except FileNotFoundError:
-                    print("[ERROR] k6 executable not found. Please ensure k6 is installed and in your PATH.", flush=True)
+                    print("\n[AGENT] I can't find the 'k6' tool on this system.", flush=True)
+                    print("[AGENT] Please install k6 (https://k6.io/docs/get-started/installation/) and make sure it's in your system PATH.", flush=True)
                     sys.exit(1)
         else:
             print("[STATUS] Dry Run: Skipping full test execution.", flush=True)
@@ -560,7 +570,8 @@ class AnalysisAgent:
                 with open(context.summary_export_path, 'r') as f:
                     metrics = json.load(f)
             except Exception as e:
-                print("[ERROR] Failed to read test summary.", flush=True)
+                print("\n[AGENT] I couldn't read the test results.", flush=True)
+                print(f"[AGENT] This might mean the test crashed or didn't produce valid JSON output. Error: {e}", flush=True)
 
             context.log_verbose(f"Evaluating SLA against metrics: {list(metrics.get('metrics', {}).keys())}")
             context.sla_results = evaluate_sla(metrics, context.inputs['sla'])

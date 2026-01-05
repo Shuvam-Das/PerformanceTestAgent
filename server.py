@@ -12,6 +12,7 @@ import psutil
 import webbrowser
 import threading
 from threading import Timer
+import google.generativeai as genai
 
 app = Flask(__name__)
 
@@ -366,6 +367,35 @@ def system_health():
         'memory_percent': psutil.virtual_memory().percent
     }
     return jsonify(health)
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.json
+    message = data.get('message')
+    context_logs = data.get('context', '')
+    
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return jsonify({'response': "I'm sorry, but I can't provide intelligent assistance right now because the GEMINI_API_KEY environment variable is not set. Please set it and restart the server."})
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        
+        prompt = f"""
+        You are a helpful AI assistant for a Performance Test Agent tool. 
+        The user is asking for help. Here is the recent log context from the tool:
+        
+        {context_logs}
+        
+        User Question: {message}
+        
+        Please provide a concise and helpful answer.
+        """
+        response = model.generate_content(prompt)
+        return jsonify({'response': response.text})
+    except Exception as e:
+        return jsonify({'response': f"I encountered an error while trying to think: {str(e)}"})
 
 def open_browser():
     webbrowser.open_new_tab("http://127.0.0.1:3000")
