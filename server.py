@@ -9,6 +9,7 @@ import zipfile
 import yaml
 import shutil
 import psutil
+import socket
 import webbrowser
 import threading
 from threading import Timer
@@ -448,6 +449,63 @@ def system_health():
         'cpu_percent': psutil.cpu_percent(interval=0.1),
         'memory_percent': psutil.virtual_memory().percent
     }
+    
+    # Docker Detection & Info
+    if os.path.exists('/.dockerenv'):
+        health['docker'] = {
+            'is_docker': True,
+            'container_id': socket.gethostname()
+        }
+        # Try to read memory limit (supports cgroup v1 and v2)
+        try:
+            mem_limit = None
+            if os.path.exists('/sys/fs/cgroup/memory.max'): # cgroup v2
+                with open('/sys/fs/cgroup/memory.max', 'r') as f:
+                    val = f.read().strip()
+                    if val.isdigit(): mem_limit = int(val)
+            elif os.path.exists('/sys/fs/cgroup/memory/memory.limit_in_bytes'): # cgroup v1
+                with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
+                    mem_limit = int(f.read().strip())
+            
+            if mem_limit:
+                health['docker']['memory_limit'] = f"{mem_limit / (1024*1024):.0f} MB"
+            else:
+                health['docker']['memory_limit'] = "Unlimited"
+        except:
+            health['docker']['memory_limit'] = "Unknown"
+            
+        # Try to get Health Status via Docker Socket
+        sock_path = '/var/run/docker.sock'
+        health_status = "Unknown (Socket not mounted)"
+        if os.path.exists(sock_path):
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(2)
+                s.connect(sock_path)
+                # HTTP/1.0 to avoid chunked encoding complexity
+                req = f"GET /containers/{socket.gethostname()}/json HTTP/1.0\r\n\r\n"
+                s.sendall(req.encode())
+                
+                resp = b""
+                while True:
+                    data = s.recv(4096)
+                    if not data: break
+                    resp += data
+                s.close()
+                
+                parts = resp.split(b'\r\n\r\n', 1)
+                if len(parts) > 1:
+                    body = parts[1].decode('utf-8', errors='ignore')
+                    if '{' in body: # Simple check to find start of JSON
+                        info = json.loads(body[body.find('{'):])
+                        health_status = info.get('State', {}).get('Health', {}).get('Status', 'No Healthcheck')
+            except Exception as e:
+                health_status = f"Query Error"
+        
+        health['docker']['health_status'] = health_status
+    else:
+        health['docker'] = {'is_docker': False}
+        
     return jsonify(health)
 
 @app.route('/api/chat', methods=['POST'])

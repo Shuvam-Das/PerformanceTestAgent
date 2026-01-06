@@ -1,16 +1,13 @@
 {
   "name": "performance-test-agent",
   "version": "1.0.0",
-  "description": "Autonomous AI engineer orchestrating end-to-end load testing pipeline",
-  "main": "agent.py",
+  "description": "Autonomous AI engineer for load testing",
+  "main": "server.py",
   "scripts": {
-    "start": "python3 agent.py",
-    "gui": "python3 server.py",
-    "lint": "eslint ."
+    "start": "python3 server.py"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "eslint": "^8.50.0",
-    "eslint-plugin-k6": "^0.0.0"
+  "dependencies": {
+    "eslint": "^8.57.0",
+    "eslint-plugin-k6": "^0.3.0"
   }
 }

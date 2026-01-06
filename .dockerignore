@@ -1,0 +1,10 @@
+results/
+__pycache__/
+*.pyc
+.git/
+.env
+node_modules/
+neuro-san-studio/
+temp_input_*.json
+*.log
+*.zip

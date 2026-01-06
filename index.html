@@ -670,6 +670,28 @@
                 </div>
                 <!-- System Health Pane -->
                 <div class="tab-pane fade p-3" id="health-pane">
+                  <div
+                    id="dockerInfo"
+                    class="mb-3 p-2 bg-dark text-light rounded"
+                    style="display: none; font-size: 0.85rem"
+                  >
+                    <div class="d-flex justify-content-between mb-1">
+                      <span
+                        ><strong>Container ID:</strong>
+                        <span id="containerId"></span
+                      ></span>
+                      <span
+                        ><strong>Mem Limit:</strong> <span id="memLimit"></span
+                      ></span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                      <span
+                        ><strong>Docker Health:</strong>
+                        <span id="healthStatus"></span
+                      ></span>
+                      <span></span>
+                    </div>
+                  </div>
                   <h6 class="mb-2">CPU Usage</h6>
                   <div class="progress mb-4" style="height: 25px">
                     <div
@@ -2225,6 +2247,29 @@
 
             memBar.style.width = data.memory_percent + "%";
             memBar.textContent = data.memory_percent.toFixed(1) + "%";
+
+            // Docker Info
+            const dockerDiv = document.getElementById("dockerInfo");
+            if (data.docker && data.docker.is_docker) {
+              dockerDiv.style.display = "block";
+              document.getElementById("containerId").textContent =
+                data.docker.container_id;
+              document.getElementById("memLimit").textContent =
+                data.docker.memory_limit || "Unknown";
+
+              const healthSpan = document.getElementById("healthStatus");
+              const status = data.docker.health_status || "Unknown";
+              healthSpan.textContent = status;
+
+              // Color coding
+              if (status === "healthy")
+                healthSpan.className = "text-success fw-bold";
+              else if (status === "unhealthy")
+                healthSpan.className = "text-danger fw-bold";
+              else healthSpan.className = "text-warning";
+            } else {
+              dockerDiv.style.display = "none";
+            }
           } catch (e) {
             console.error("Health monitor failed:", e);
             stopHealthMonitor(); // Stop polling on error
