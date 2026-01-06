@@ -13,6 +13,7 @@ import socket
 import webbrowser
 import threading
 from threading import Timer
+from datetime import timedelta
 try:
     from google import genai
 except ImportError:
@@ -24,6 +25,7 @@ app = Flask(__name__)
 current_process = None
 server_state = {'is_running': False}
 log_history = []
+START_TIME = time.time()
 
 @app.route('/')
 def index():
@@ -447,7 +449,8 @@ def get_env_vars():
 def system_health():
     health = {
         'cpu_percent': psutil.cpu_percent(interval=0.1),
-        'memory_percent': psutil.virtual_memory().percent
+        'memory_percent': psutil.virtual_memory().percent,
+        'uptime': str(timedelta(seconds=int(time.time() - START_TIME)))
     }
     
     # Docker Detection & Info

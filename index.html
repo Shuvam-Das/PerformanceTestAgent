@@ -692,6 +692,7 @@
                       <span></span>
                     </div>
                   </div>
+                  <div class="mb-3 text-end font-monospace" style="font-size: 0.85rem;">Uptime: <span id="sysUptime">--:--:--</span></div>
                   <h6 class="mb-2">CPU Usage</h6>
                   <div class="progress mb-4" style="height: 25px">
                     <div
@@ -2247,6 +2248,7 @@
 
             memBar.style.width = data.memory_percent + "%";
             memBar.textContent = data.memory_percent.toFixed(1) + "%";
+            document.getElementById("sysUptime").textContent = data.uptime;
 
             // Docker Info
             const dockerDiv = document.getElementById("dockerInfo");
