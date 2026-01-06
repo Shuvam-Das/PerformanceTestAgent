@@ -1041,46 +1041,4 @@ def main():
     master.orchestrate(context, agents)
 
 if __name__ == "__main__":
-    main()Load existing context data
-        try:
-            if os.path.exists(args.config):
-                with open(args.config, 'r') as f:
-                    context.config = yaml.safe_load(os.path.expandvars(f.read())) or {}
-            
-            with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'r') as f:
-                context.inputs = json.load(f)
-            
-            sla_path = os.path.join(context.result_dir, 'sla_validation.json')
-            if os.path.exists(sla_path):
-                with open(sla_path, 'r') as f:
-                    context.sla_results = json.load(f)
-            
-            context.summary_export_path = os.path.join(context.result_dir, 'summary_export.json')
-            
-            MasterAgent().orchestrate(context, [NeuroSanAgent()])
-            return
-        except Exception as e:
-            print(f"[ERROR] Re-analysis failed: {e}", flush=True)
-            sys.exit(1)
-    
-    # Define Agents
-    agents = [
-        IngestionAgent(),
-        GeneratorAgent(),
-        ValidationAgent(),
-        NeuroSanAgent(mode='pre-flight'),
-        ExecutionAgent(),
-        MonitoringAgent(),
-        AnalysisAgent(),
-        NeuroSanAgent(),
-        NeuroSanAgent(mode='analysis'),
-        NotificationAgent(),
-        CleanupAgent()
-    ]
-    
-    # Orchestrate
-    master = MasterAgent()
-    master.orchestrate(context, agents)
-
-if __name__ == "__main__":
     main()

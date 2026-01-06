@@ -39,7 +39,6 @@ def process_monitor(proc, temp_file):
     # Read output
     for line in iter(proc.stdout.readline, ''):
         if not line: break
-        print(f"[SERVER DEBUG] {line.rstrip()}") # Debug to verify data flow
         msg = {'type': 'stdout', 'message': line.rstrip()}
         log_history.append(msg)
         
