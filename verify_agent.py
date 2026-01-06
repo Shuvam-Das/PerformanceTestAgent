@@ -557,6 +557,86 @@ def test_csv_data_driving():
         elif os.path.exists(script_path):
             os.remove(script_path)
 
+def test_extracted_file_management():
+    log("Testing extracted file management APIs...", "INFO")
+    
+    # Get a run to test with
+    res = requests.get(f"{BASE_URL}/api/history")
+    if res.status_code != 200 or not res.json():
+        log("No history found to test file management", "SKIP")
+        return True
+    
+    history_item = res.json()[0]
+    run_name = history_item['name'] if isinstance(history_item, dict) else history_item
+    
+    folder = run_name
+    filename = "test_file_mgmt.txt"
+    content = "Initial content"
+    
+    # 1. Create File
+    res = requests.post(f"{BASE_URL}/api/create-extracted-file", json={"folder": folder, "filename": filename})
+    if res.status_code != 200:
+        log(f"Failed to create file: {res.text}", "FAIL")
+        return False
+    
+    # 2. Save Content
+    res = requests.post(f"{BASE_URL}/api/save-extracted-file", json={"folder": folder, "filename": filename, "content": content})
+    if res.status_code != 200:
+        log(f"Failed to save file content: {res.text}", "FAIL")
+        return False
+        
+    # Verify content
+    file_res = requests.get(f"{BASE_URL}/results/{folder}/scripts/{filename}")
+    if file_res.status_code != 200 or file_res.text != content:
+        log(f"File content mismatch or not found. Status: {file_res.status_code}", "FAIL")
+        return False
+
+    # 3. Rename File
+    new_filename = "renamed_test_file.txt"
+    res = requests.post(f"{BASE_URL}/api/rename-extracted-file", json={"folder": folder, "old_filename": filename, "new_filename": new_filename})
+    if res.status_code != 200:
+        log(f"Failed to rename file: {res.text}", "FAIL")
+        return False
+        
+    # 4. Duplicate File
+    dup_filename = "dup_test_file.txt"
+    res = requests.post(f"{BASE_URL}/api/duplicate-extracted-file", json={"folder": folder, "filename": new_filename, "new_filename": dup_filename})
+    if res.status_code != 200:
+        log(f"Failed to duplicate file: {res.text}", "FAIL")
+        return False
+
+    # 5. Delete Files
+    res = requests.post(f"{BASE_URL}/api/delete-extracted-file", json={"folder": folder, "filename": new_filename})
+    if res.status_code != 200:
+        log(f"Failed to delete renamed file: {res.text}", "FAIL")
+        return False
+        
+    res = requests.post(f"{BASE_URL}/api/delete-extracted-file", json={"folder": folder, "filename": dup_filename})
+    if res.status_code != 200:
+        log(f"Failed to delete duplicate file: {res.text}", "FAIL")
+        return False
+
+    log("Extracted file management APIs verified", "PASS")
+    return True
+
+def test_download_artifact():
+    log("Testing download artifact API...", "INFO")
+    res = requests.get(f"{BASE_URL}/api/history")
+    if res.status_code != 200 or not res.json():
+        log("No history found to test download", "SKIP")
+        return True
+        
+    history_item = res.json()[0]
+    run_name = history_item['name'] if isinstance(history_item, dict) else history_item
+    
+    res = requests.get(f"{BASE_URL}/api/download/{run_name}")
+    if res.status_code == 200 and res.headers.get('Content-Type') == 'application/zip':
+        log("Download API returned valid ZIP", "PASS")
+        return True
+    else:
+        log(f"Download API failed: {res.status_code}", "FAIL")
+        return False
+
 def main():
     print("=== Starting Verification Script ===\n")
     
@@ -577,6 +657,8 @@ def main():
     test_neuro_san_preflight_failure()
     test_csv_data_driving()
     test_advanced_generator_features()
+    test_extracted_file_management()
+    test_download_artifact()
     
     print("\n=== Verification Complete ===")
 
