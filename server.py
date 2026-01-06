@@ -228,11 +228,73 @@ def history():
     
     try:
         # List directories, sort by name desc (timestamp)
-        items = [d for d in os.listdir(res_dir) if os.path.isdir(os.path.join(res_dir, d))]
-        items.sort(reverse=True)
+        items = []
+        for d in os.listdir(res_dir):
+            full_path = os.path.join(res_dir, d)
+            if os.path.isdir(full_path):
+                enhanced = os.path.exists(os.path.join(full_path, 'neuro_san.flag'))
+                
+                # Determine Pass/Fail status
+                status = 'UNKNOWN'
+                sla_path = os.path.join(full_path, 'sla_validation.json')
+                
+                if os.path.exists(os.path.join(full_path, 'preflight_failed.flag')):
+                    status = 'PRE-FLIGHT FAILED'
+                
+                if os.path.exists(sla_path):
+                    try:
+                        with open(sla_path, 'r') as f:
+                            sla_data = json.load(f)
+                            status = 'PASS' if sla_data.get('pass') else 'FAIL'
+                    except: pass
+                
+                items.append({'name': d, 'enhanced': enhanced, 'status': status})
+        
+        items.sort(key=lambda x: x['name'], reverse=True)
         return jsonify(items)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/reanalyze', methods=['POST'])
+def reanalyze():
+    data = request.json
+    folder = data.get('folder')
+    if not folder:
+        return jsonify({'error': 'Folder required'}), 400
+    
+    # Security check
+    if '..' in folder or folder.startswith('/') or folder.startswith('\\'):
+         return jsonify({'error': 'Invalid folder'}), 400
+
+    target_dir = os.path.join('results', folder)
+    if not os.path.exists(target_dir):
+        return jsonify({'error': 'Folder not found'}), 404
+
+    def generate():
+        cmd = [sys.executable, '-u', 'agent.py', '--reanalyze', target_dir]
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUNBUFFERED"] = "1"
+        
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            env=env,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        for line in proc.stdout:
+            yield f"data: {json.dumps({'type': 'stdout', 'message': line.rstrip()})}\n\n"
+            
+        proc.wait()
+        yield f"data: {json.dumps({'type': 'done', 'code': {'code': proc.returncode}})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/delete-run', methods=['POST'])
 def delete_run():
@@ -303,6 +365,12 @@ def save_config():
     
     if data.get('gemini_api_key'):
         config['gemini_api_key'] = data['gemini_api_key']
+
+    if 'neuro_san_auto_update' in data:
+        config['neuro_san_auto_update'] = data['neuro_san_auto_update']
+
+    if 'neuro_san_script' in data:
+        config['neuro_san_script'] = data['neuro_san_script']
 
     try:
         with open('config.yaml', 'w', encoding='utf-8') as f:

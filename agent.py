@@ -9,6 +9,7 @@ import requests
 import threading
 import math
 import time
+import html
 from datetime import datetime
 
 try:
@@ -276,16 +277,20 @@ class ValidationAgent:
         print("[STATUS] Stage: Smoke Run", flush=True)
         cmd = ['k6', 'run', '--vus', '1', '--duration', '1s', context.script_path]
         context.log_verbose(f"Executing: {' '.join(cmd)}")
-        smoke_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
-        with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w', encoding='utf-8') as f:
-            f.write(smoke_res.stdout + smoke_res.stderr)
-        
-        if smoke_res.returncode != 0:
-            print("\n[AGENT] The test script failed during a quick smoke test.", flush=True)
-            print("[AGENT] This usually means there's a runtime error in the script logic.", flush=True)
-            print("[AGENT] Please check the 'Smoke Log' artifact for detailed error messages.", flush=True)
-            log_comm("ValidationAgent", "MasterAgent", "Smoke test failed.")
-            sys.exit(1)
+        try:
+            smoke_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
+            with open(os.path.join(context.result_dir, 'smoke_run_output.txt'), 'w', encoding='utf-8') as f:
+                f.write(smoke_res.stdout + smoke_res.stderr)
+            
+            if smoke_res.returncode != 0:
+                print("\n[AGENT] The test script failed during a quick smoke test.", flush=True)
+                print("[AGENT] This usually means there's a runtime error in the script logic.", flush=True)
+                print("[AGENT] Please check the 'Smoke Log' artifact for detailed error messages.", flush=True)
+                log_comm("ValidationAgent", "MasterAgent", "Smoke test failed.")
+                sys.exit(1)
+        except FileNotFoundError:
+            print("[WARN] 'k6' binary not found. Skipping smoke test.", flush=True)
+            log_comm("ValidationAgent", "MasterAgent", "Smoke test skipped (k6 missing).")
 
         # Workload Scenario Check
         if not context.inputs.get('workload_scenario'):
@@ -594,7 +599,7 @@ class AnalysisAgent:
             print("[STATUS] Stage: SLA Evaluation", flush=True)
             metrics = {}
             try:
-                with open(context.summary_export_path, 'r') as f:
+                with open(context.summary_export_path, 'r', encoding='utf-8') as f:
                     metrics = json.load(f)
             except Exception as e:
                 print("\n[AGENT] I couldn't read the test results.", flush=True)
@@ -604,7 +609,7 @@ class AnalysisAgent:
             context.log_verbose(f"Evaluating SLA against metrics: {list(metrics.get('metrics', {}).keys())}")
             context.sla_results = evaluate_sla(metrics, context.inputs['sla'])
             context.log_verbose(f"SLA Results: {json.dumps(context.sla_results, indent=2)}")
-            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
+            with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w', encoding='utf-8') as f:
                 json.dump(context.sla_results, f, indent=2)
 
             # Generate PDF Report
@@ -680,7 +685,7 @@ class AnalysisAgent:
 - Results
 - PDF Report
 """
-        with open(os.path.join(context.result_dir, 'summary.md'), 'w') as f:
+        with open(os.path.join(context.result_dir, 'summary.md'), 'w', encoding='utf-8') as f:
             f.write(context.summary_md)
 
         print("[STATUS] Pipeline Complete.", flush=True)
@@ -693,6 +698,173 @@ class AnalysisAgent:
             log_comm("AnalysisAgent", "MasterAgent", f"SLA Verdict: {'PASS' if context.sla_results['pass'] else 'FAIL'}")
         else:
             print("[SUCCESS] Dry Run Complete.", flush=True)
+
+class NeuroSanAgent:
+    def __init__(self, mode='analysis'):
+        self.mode = mode
+
+    def run(self, context: PipelineContext):
+        stage_label = "Pre-flight" if self.mode == 'pre-flight' else "Analysis"
+        log_comm("NeuroSanAgent", "MasterAgent", f"Initializing Neuro-San ({stage_label})...")
+        
+        # 1. Detect if the repo is present locally (use absolute path relative to agent.py)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_path = os.path.join(base_dir, 'neuro-san-studio')
+        repo_url = "https://github.com/cognizant-ai-lab/neuro-san-studio.git"
+        
+        # Check config for auto-update preference (default to True)
+        auto_update = context.config.get('neuro_san_auto_update', True)
+
+        if os.path.exists(repo_path):
+            if auto_update:
+                log_comm("NeuroSanAgent", "MasterAgent", "Checking for updates...")
+                try:
+                    if os.path.exists(os.path.join(repo_path, '.git')):
+                        proc = subprocess.run(["git", "-C", repo_path, "pull"], check=False, capture_output=True)
+                        if proc.returncode == 0:
+                            print("[INFO] Neuro-San Studio updated.", flush=True)
+                except Exception as e:
+                    print(f"[WARN] Failed to update Neuro-San Studio: {e}", flush=True)
+            else:
+                print("[INFO] Neuro-San Studio auto-update disabled in config.", flush=True)
+        else:
+            log_comm("NeuroSanAgent", "MasterAgent", "Cloning repository...")
+            try:
+                subprocess.run(["git", "clone", repo_url, repo_path], check=True, capture_output=True)
+                print("[INFO] Neuro-San Studio cloned successfully.", flush=True)
+            except Exception as e:
+                print(f"[INFO] 'neuro-san-studio' folder not found and clone failed. Skipping.", flush=True)
+                log_comm("NeuroSanAgent", "MasterAgent", "Skipped: Repo not found.")
+                return
+
+        # 1.5 Install dependencies if requirements.txt exists
+        req_path = os.path.join(repo_path, 'requirements.txt')
+        if os.path.exists(req_path):
+            log_comm("NeuroSanAgent", "MasterAgent", "Installing dependencies from requirements.txt...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_path])
+                print("[INFO] Neuro-San dependencies installed.", flush=True)
+            except subprocess.CalledProcessError as e:
+                print(f"[WARN] Failed to install dependencies: {e}", flush=True)
+                log_comm("NeuroSanAgent", "MasterAgent", "Dependency installation failed.")
+
+        # 2. Attempt to bridge (Placeholder for specific API calls)
+        print(f"[STATUS] Stage: Neuro-San {stage_label} (Found at {repo_path})", flush=True)
+        log_comm("NeuroSanAgent", "MasterAgent", f"Delegating context to Neuro-San ({stage_label})...")
+        
+        # Determine script to run (default to 'process.py' or config override)
+        default_script = 'preflight.py' if self.mode == 'pre-flight' else 'process.py'
+        config_key = 'neuro_san_preflight_script' if self.mode == 'pre-flight' else 'neuro_san_script'
+        script_name = context.config.get(config_key, default_script)
+        script_path = os.path.join(repo_path, script_name)
+        inputs_path = os.path.abspath(os.path.join(context.result_dir, 'input_snapshot.json'))
+
+        # Handle Custom Config
+        ns_config_path = None
+        if context.inputs.get('neuro_san_config'):
+            ns_config_path = os.path.abspath(os.path.join(context.result_dir, 'neuro_san_config.yaml'))
+            with open(ns_config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(context.inputs['neuro_san_config'], f)
+
+        try:
+            if os.path.exists(script_path):
+                log_comm("NeuroSanAgent", "MasterAgent", f"Executing {script_name}...")
+                cmd = [sys.executable, script_path, '--inputs', inputs_path]
+                
+                # Add results paths only in analysis mode
+                if self.mode == 'analysis':
+                    results_path = os.path.abspath(context.summary_export_path)
+                    raw_results_path = os.path.abspath(os.path.join(context.result_dir, 'test_results.json'))
+                    cmd.extend(['--results', results_path])
+                    if os.path.exists(raw_results_path):
+                        cmd.extend(['--raw-results', raw_results_path])
+
+                if ns_config_path:
+                    cmd.extend(['--config', ns_config_path])
+
+                print(f"[DEBUG] Neuro-San Command: {cmd}", flush=True)
+                
+                # Use Popen for streaming output
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1, universal_newlines=True)
+                
+                output_lines = []
+                for line in iter(proc.stdout.readline, ''):
+                    if not line: break
+                    clean_line = line.rstrip()
+                    print(f"[NEURO-SAN] {clean_line}", flush=True)
+                    output_lines.append(clean_line)
+                
+                proc.wait()
+                full_output = "\n".join(output_lines)
+                
+                if proc.returncode == 0:
+                    if self.mode == 'analysis' and context.summary_md:
+                        context.summary_md += f"\n\n## 🧬 Neuro-San Analysis\n\n{full_output}\n"
+                        with open(os.path.join(context.result_dir, 'summary.md'), 'w', encoding='utf-8') as f:
+                            f.write(context.summary_md)
+                    
+                    if self.mode == 'analysis':
+                        # Create HTML Report
+                        safe_output = html.escape(full_output)
+                        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Neuro-San Analysis Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {{ padding: 20px; background-color: #f8f9fa; }}
+        .report-container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        pre {{ background: #f4f4f4; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: Consolas, monospace; }}
+    </style>
+</head>
+<body>
+    <div class="container report-container">
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+            <h1 class="h3 text-primary">🧬 Neuro-San Analysis Report</h1>
+            <span class="text-muted small">{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span>
+        </div>
+        <div class="content">
+            <pre>{safe_output}</pre>
+        </div>
+    </div>
+</body>
+</html>"""
+                        with open(os.path.join(context.result_dir, 'neuro_san_report.html'), 'w', encoding='utf-8') as f:
+                            f.write(html_content)
+
+                        # Create marker file for GUI badge
+                        with open(os.path.join(context.result_dir, 'neuro_san.flag'), 'w') as f:
+                            f.write('1')
+
+                    log_comm("NeuroSanAgent", "MasterAgent", f"External {stage_label.lower()} successful.")
+                else:
+                    print(f"[WARN] Neuro-San script failed with code {proc.returncode}", flush=True)
+                    log_comm("NeuroSanAgent", "MasterAgent", "Script execution failed.")
+                    
+                    # Handle Failure
+                    if self.mode == 'pre-flight':
+                        with open(os.path.join(context.result_dir, 'preflight_failed.flag'), 'w') as f:
+                            f.write('1')
+                        print("[ERROR] Pre-flight check failed. Aborting pipeline.", flush=True)
+                        sys.exit(1)
+                    elif context.sla_results:
+                        # Flag as failed in SLA results during analysis
+                        context.sla_results['pass'] = False
+                        context.sla_results['neuro_san_failure'] = True
+                        with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w', encoding='utf-8') as f:
+                            json.dump(context.sla_results, f, indent=2)
+                        print("[WARN] Run flagged as FAILED due to Neuro-San script failure.", flush=True)
+
+            else:
+                print(f"[INFO] Script '{script_name}' not found in {repo_path}. Skipping execution.", flush=True)
+                if self.mode == 'pre-flight':
+                    print(f"[INFO] Pre-flight skipped (script not found).", flush=True)
+                else:
+                    print(f"[INFO] Create '{script_name}' to process '--results <json_path>' for advanced analysis.", flush=True)
+                log_comm("NeuroSanAgent", "MasterAgent", f"{stage_label} skipped (script missing).")
+        except Exception as e:
+            print(f"[WARN] Neuro-San integration failed: {e}", flush=True)
+            log_comm("NeuroSanAgent", "MasterAgent", f"Error: {str(e)}")
 
 class NotificationAgent:
     def run(self, context: PipelineContext):
@@ -802,6 +974,7 @@ def main():
     parser.add_argument('--notify', type=str, help="Webhook URL to send test summary")
     parser.add_argument('--parallel', type=int, default=1, help="Number of parallel Docker containers")
     parser.add_argument('--cleanup-threshold', type=int, default=90, help="Disk usage percentage threshold for cleanup")
+    parser.add_argument('--reanalyze', type=str, help="Re-run Neuro-San analysis on existing result folder")
     
     args = parser.parse_args()
 
@@ -812,15 +985,90 @@ def main():
 
     # Initialize Pipeline Context
     context = PipelineContext(args)
+
+    # Handle Re-analysis Mode
+    if args.reanalyze:
+        context.result_dir = args.reanalyze
+        if not os.path.exists(context.result_dir):
+            print(f"[ERROR] Result directory not found: {context.result_dir}")
+            sys.exit(1)
+            
+        print(f"[STATUS] Re-analyzing results in: {context.result_dir}", flush=True)
+        
+        # Load existing context data
+        try:
+            if os.path.exists(args.config):
+                with open(args.config, 'r') as f:
+                    context.config = yaml.safe_load(os.path.expandvars(f.read())) or {}
+            
+            with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'r') as f:
+                context.inputs = json.load(f)
+            
+            sla_path = os.path.join(context.result_dir, 'sla_validation.json')
+            if os.path.exists(sla_path):
+                with open(sla_path, 'r') as f:
+                    context.sla_results = json.load(f)
+            
+            context.summary_export_path = os.path.join(context.result_dir, 'summary_export.json')
+            
+            MasterAgent().orchestrate(context, [NeuroSanAgent()])
+            return
+        except Exception as e:
+            print(f"[ERROR] Re-analysis failed: {e}", flush=True)
+            sys.exit(1)
     
     # Define Agents
     agents = [
         IngestionAgent(),
         GeneratorAgent(),
         ValidationAgent(),
+        NeuroSanAgent(mode='pre-flight'),
         ExecutionAgent(),
         MonitoringAgent(),
         AnalysisAgent(),
+        NeuroSanAgent(mode='analysis'),
+        NotificationAgent(),
+        CleanupAgent()
+    ]
+    
+    # Orchestrate
+    master = MasterAgent()
+    master.orchestrate(context, agents)
+
+if __name__ == "__main__":
+    main()Load existing context data
+        try:
+            if os.path.exists(args.config):
+                with open(args.config, 'r') as f:
+                    context.config = yaml.safe_load(os.path.expandvars(f.read())) or {}
+            
+            with open(os.path.join(context.result_dir, 'input_snapshot.json'), 'r') as f:
+                context.inputs = json.load(f)
+            
+            sla_path = os.path.join(context.result_dir, 'sla_validation.json')
+            if os.path.exists(sla_path):
+                with open(sla_path, 'r') as f:
+                    context.sla_results = json.load(f)
+            
+            context.summary_export_path = os.path.join(context.result_dir, 'summary_export.json')
+            
+            MasterAgent().orchestrate(context, [NeuroSanAgent()])
+            return
+        except Exception as e:
+            print(f"[ERROR] Re-analysis failed: {e}", flush=True)
+            sys.exit(1)
+    
+    # Define Agents
+    agents = [
+        IngestionAgent(),
+        GeneratorAgent(),
+        ValidationAgent(),
+        NeuroSanAgent(mode='pre-flight'),
+        ExecutionAgent(),
+        MonitoringAgent(),
+        AnalysisAgent(),
+        NeuroSanAgent(),
+        NeuroSanAgent(mode='analysis'),
         NotificationAgent(),
         CleanupAgent()
     ]

@@ -1,0 +1,19 @@
+{
+  "api_collection": {
+    "endpoints": [
+      {
+        "method": "GET",
+        "url": "https://httpbin.org/get"
+      }
+    ]
+  },
+  "workload_scenario": {
+    "executor": "constant-vus",
+    "vus": 1,
+    "duration": "1s"
+  },
+  "sla": {
+    "http_req_duration_p95_ms": 500
+  },
+  "env": null
+}

@@ -780,7 +780,7 @@
       aria-hidden="true"
     >
       <div
-        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+        class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"
       >
         <div class="modal-content">
           <div class="modal-header">
@@ -1007,6 +1007,31 @@
             >
               Save Changes
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Neuro-San Report Modal -->
+    <div class="modal fade" id="neuroSanModal" tabindex="-1" aria-hidden="true">
+      <div
+        class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"
+      >
+        <div class="modal-content" style="height: 90vh">
+          <div class="modal-header">
+            <h5 class="modal-title">Neuro-San Analysis Report</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body p-0">
+            <iframe
+              id="neuroSanFrame"
+              style="width: 100%; height: 100%; border: none"
+            ></iframe>
           </div>
         </div>
       </div>
@@ -1598,21 +1623,54 @@
             return;
           }
 
-          folders.forEach((folder) => {
+          folders.forEach((itemData) => {
+            const folder = itemData.name || itemData; // Handle object or legacy string
+            const enhanced = itemData.enhanced || false;
+            const status = itemData.status || "UNKNOWN";
+
+            let statusBadge = "";
+            if (status === "PASS")
+              statusBadge =
+                '<span class="badge bg-success ms-2" style="font-size: 0.65rem;">PASS</span>';
+            else if (status === "FAIL")
+              statusBadge =
+                '<span class="badge bg-danger ms-2" style="font-size: 0.65rem;">FAIL</span>';
+            else if (status === "PRE-FLIGHT FAILED")
+              statusBadge =
+                '<span class="badge bg-dark ms-2" style="font-size: 0.65rem;">PRE-FLIGHT FAIL</span>';
+
             const item = document.createElement("div");
             item.className = "list-group-item";
+
+            let badgeHtml = "";
+            if (enhanced) {
+              badgeHtml =
+                '<span class="badge bg-info text-dark ms-2" style="font-size: 0.65rem;" title="Enhanced by Neuro-San Studio">Neuro-San</span>';
+            }
+
+            let neuroSanLink = "";
+            if (enhanced) {
+              neuroSanLink = `<button onclick="viewNeuroSanReport('${folder}')" class="btn btn-sm btn-outline-info py-0" style="font-size: 0.75rem;">Neuro-San Report</button>`;
+            }
+
             item.innerHTML = `
                     <div class="d-flex w-100 align-items-center">
                       <div class="me-3">
                         <input type="checkbox" class="form-check-input" value="${folder}" onchange="toggleRunSelection('${folder}')">
                       </div>
                       <div class="flex-grow-1 d-flex justify-content-between align-items-center">
-                      <span class="fw-bold small">${folder}</span>
+                      <div>
+                        <span class="fw-bold small">${folder}</span>
+                        ${badgeHtml}
+                        ${statusBadge}
+                      </div>
                       <div>
                         <a href="/results/${folder}/summary.md" target="_blank" class="btn btn-sm btn-outline-primary py-0" style="font-size: 0.75rem;">Summary</a>
                         <a href="/results/${folder}/test_results.json" target="_blank" class="btn btn-sm btn-outline-secondary py-0" style="font-size: 0.75rem;">JSON</a>
                         <a href="/results/${folder}/report.pdf" target="_blank" class="btn btn-sm btn-outline-danger py-0" style="font-size: 0.75rem;">PDF</a>
+                        ${neuroSanLink}
                         <a href="/api/download/${folder}" class="btn btn-sm btn-outline-dark py-0" style="font-size: 0.75rem;">Download All</a>
+                        <button onclick="reRunNeuroSan('${folder}')" class="btn btn-sm btn-outline-warning py-0" style="font-size: 0.75rem;">Re-run Neuro-San</button>
                         <button onclick="viewCharts('${folder}')" class="btn btn-sm btn-outline-info py-0" style="font-size: 0.75rem;">Charts</button>
                       </div>
                       </div>
@@ -1625,6 +1683,44 @@
           });
         } catch (e) {
           list.innerHTML = `<div class="text-danger p-3">Error: ${e.message}</div>`;
+        }
+      }
+
+      async function reRunNeuroSan(folder) {
+        if (!confirm(`Re-run Neuro-San analysis for ${folder}?`)) return;
+
+        // Switch to console tab
+        const consoleTab = new bootstrap.Tab(
+          document.getElementById("console-tab")
+        );
+        consoleTab.show();
+        clearConsole();
+
+        try {
+          const response = await fetch("/reanalyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder: folder }),
+          });
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            const events = chunk.split("\n\n");
+            events.forEach((event) => {
+              if (event.startsWith("data: ")) {
+                const data = JSON.parse(event.replace("data: ", ""));
+                handleStreamData(data);
+              }
+            });
+          }
+          loadHistory(); // Refresh to show updated status/badge
+        } catch (e) {
+          alert("Error: " + e.message);
         }
       }
 
@@ -1670,6 +1766,48 @@
             });
           }
           output.innerHTML = marked.parse(rawMarkdown);
+
+          // --- NEW: Neuro-San Comparison ---
+          const [res1, res2] = await Promise.all([
+            fetch(`/results/${selectedRuns[0]}/neuro_san_report.html`),
+            fetch(`/results/${selectedRuns[1]}/neuro_san_report.html`),
+          ]);
+
+          if (res1.ok && res2.ok) {
+            const html1 = await res1.text();
+            const html2 = await res2.text();
+
+            const extractContent = (html) => {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, "text/html");
+              const pre = doc.querySelector("pre");
+              return pre ? pre.innerHTML : "No content found";
+            };
+
+            const content1 = extractContent(html1);
+            const content2 = extractContent(html2);
+
+            const nsDiv = document.createElement("div");
+            nsDiv.className = "mt-4 pt-3 border-top";
+            nsDiv.innerHTML = `
+                <h5 class="mb-3">🧬 Neuro-San Analysis Comparison</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light"><strong>${selectedRuns[0]}</strong></div>
+                            <div class="card-body p-0"><pre class="m-0 p-3" style="white-space: pre-wrap; font-size: 0.8rem; max-height: 400px; overflow-y: auto; background-color: #f8f9fa;">${content1}</pre></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light"><strong>${selectedRuns[1]}</strong></div>
+                            <div class="card-body p-0"><pre class="m-0 p-3" style="white-space: pre-wrap; font-size: 0.8rem; max-height: 400px; overflow-y: auto; background-color: #f8f9fa;">${content2}</pre></div>
+                        </div>
+                    </div>
+                </div>
+             `;
+            output.appendChild(nsDiv);
+          }
         } catch (e) {
           output.textContent += `\nError: ${e.message}`;
         }
@@ -1820,6 +1958,14 @@
         } finally {
           loading.style.display = "none";
         }
+      }
+
+      function viewNeuroSanReport(folder) {
+        const modalEl = document.getElementById("neuroSanModal");
+        const modal = new bootstrap.Modal(modalEl);
+        const iframe = document.getElementById("neuroSanFrame");
+        iframe.src = `/results/${folder}/neuro_san_report.html`;
+        modal.show();
       }
 
       async function saveConfig() {
@@ -2151,6 +2297,7 @@
         { id: "ExecutionAgent", name: "Execution", icon: "🚀" },
         { id: "MonitoringAgent", name: "Monitoring", icon: "📊" },
         { id: "AnalysisAgent", name: "Analysis", icon: "📈" },
+        { id: "NeuroSanAgent", name: "Neuro-San", icon: "🧬" },
         { id: "NotificationAgent", name: "Notification", icon: "🔔" },
         { id: "CleanupAgent", name: "Cleanup", icon: "🧹" },
       ];

@@ -38,7 +38,8 @@ def parse_input(config):
         "api_collection": None,
         "workload_scenario": None,
         "sla": None,
-        "env": None
+        "env": None,
+        "neuro_san_config": None
     }
 
     # 2. Parsing Logic
@@ -121,6 +122,9 @@ def parse_input(config):
                 
                 if obj.get('env'):
                     result['env'] = obj['env']
+                
+                if obj.get('neuro_san_config'):
+                    result['neuro_san_config'] = obj['neuro_san_config']
             elif isinstance(obj, list) and len(obj) > 0 and obj[0].get('method') and obj[0].get('url'):
                 result['api_collection'] = {'endpoints': obj}
 

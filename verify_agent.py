@@ -127,8 +127,8 @@ def test_history_and_comparison():
     log(f"Found {len(history)} historical runs", "INFO")
     
     if len(history) >= 2:
-        folder1 = history[0]
-        folder2 = history[1]
+        folder1 = history[0]['name'] if isinstance(history[0], dict) else history[0]
+        folder2 = history[1]['name'] if isinstance(history[1], dict) else history[1]
         log(f"Testing comparison between {folder1} and {folder2}...", "INFO")
         
         payload = {"folder1": folder1, "folder2": folder2}
@@ -155,6 +155,338 @@ def test_delete_run():
         log(f"Delete run API failed: {res.status_code}", "FAIL")
         return False
 
+def test_neuro_san_integration():
+    log("Testing Neuro-San Studio integration...", "INFO")
+    
+    # 1. Setup Dummy Neuro-San Environment
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_path = os.path.join(base_dir, 'neuro-san-studio')
+    script_path = os.path.join(repo_path, 'process.py')
+    
+    # Ensure directory exists
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path)
+    
+    # Backup existing script if any
+    original_content = None
+    if os.path.exists(script_path):
+        with open(script_path, 'r') as f:
+            original_content = f.read()
+            
+    # Create a dummy process.py that prints a signature
+    signature = "NEURO_SAN_VERIFICATION_SIGNATURE_12345"
+    dummy_script = f"print('{signature}')"
+    
+    with open(script_path, 'w') as f:
+        f.write(dummy_script)
+        
+    try:
+        # 2. Run Pipeline (Dry Run)
+        input_data = {
+            "api_collection": {"endpoints": [{"method": "GET", "url": "https://httpbin.org/get"}]},
+            "sla": {"http_req_duration_p95_ms": 500},
+            "workload_scenario": {"executor": "constant-vus", "vus": 1, "duration": "1s"}
+        }
+        
+        payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+        
+        res = requests.post(f"{BASE_URL}/run", json=payload, stream=True)
+        if res.status_code != 200:
+            log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+            return False
+            
+        # Capture logs for debugging
+        logs = []
+        for line in res.iter_lines():
+            if line:
+                decoded = line.decode('utf-8')
+                logs.append(decoded)
+        
+        # Verify Streaming Output
+        streaming_verified = False
+        for l in logs:
+            if "[NEURO-SAN]" in l and signature in l:
+                streaming_verified = True
+                break
+        
+        if streaming_verified:
+            log("Neuro-San output streaming verified in live logs", "PASS")
+        else:
+            log("Neuro-San output streaming NOT detected", "FAIL")
+        
+        # Check if smoke test was skipped (optional verification for environments without k6)
+        for l in logs:
+            if "Smoke test skipped" in l:
+                log("Verified: Smoke test skipped gracefully due to missing k6", "INFO")
+                break
+            
+        # 3. Verify Output in Summary
+        res = requests.get(f"{BASE_URL}/api/history")
+        latest_run_data = res.json()[0]
+        
+        # Verify Badge Flag
+        if isinstance(latest_run_data, dict) and latest_run_data.get('enhanced') is True:
+            log("Neuro-San badge flag (enhanced=True) verified in API", "PASS")
+        else:
+            log(f"Neuro-San badge flag missing. Response: {latest_run_data}", "FAIL")
+            log("=== SERVER LOGS START ===", "DEBUG")
+            for l in logs:
+                print(l)
+            log("=== SERVER LOGS END ===", "DEBUG")
+
+        latest_run = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+        summary_res = requests.get(f"{BASE_URL}/results/{latest_run}/summary.md")
+        
+        if signature in summary_res.text:
+            log("Neuro-San output found in summary.md", "PASS")
+        else:
+            log("Neuro-San output NOT found in summary.md", "FAIL")
+            return False
+            
+        # Verify HTML Report
+        report_url = f"{BASE_URL}/results/{latest_run}/neuro_san_report.html"
+        report_res = requests.get(report_url)
+        if report_res.status_code == 200 and signature in report_res.text:
+            log("Neuro-San HTML report generated and accessible", "PASS")
+            return True
+        else:
+            log(f"Neuro-San HTML report missing (Status: {report_res.status_code})", "FAIL")
+            return False
+    finally:
+        # Cleanup: Restore original script or delete dummy
+        if original_content:
+            with open(script_path, 'w') as f:
+                f.write(original_content)
+        elif os.path.exists(script_path):
+            os.remove(script_path)
+
+def test_neuro_san_failure_and_rerun():
+    log("Testing Neuro-San failure flagging and re-run...", "INFO")
+    
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_path = os.path.join(base_dir, 'neuro-san-studio')
+    script_path = os.path.join(repo_path, 'process.py')
+    
+    # Ensure directory exists
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path)
+    
+    # Backup existing script if any
+    original_content = None
+    if os.path.exists(script_path):
+        with open(script_path, 'r') as f:
+            original_content = f.read()
+            
+    try:
+        # --- Step 1: Failing Script ---
+        log("Step 1: Simulating Neuro-San script failure...", "INFO")
+        with open(script_path, 'w') as f:
+            f.write("import sys; print('CRITICAL FAILURE'); sys.exit(1)")
+            
+        # Run Pipeline (Dry Run)
+        input_data = {
+            "api_collection": {"endpoints": [{"method": "GET", "url": "https://httpbin.org/get"}]},
+            "sla": {"http_req_duration_p95_ms": 500},
+            "workload_scenario": {"executor": "constant-vus", "vus": 1, "duration": "1s"}
+        }
+        
+        payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+        
+        res = requests.post(f"{BASE_URL}/run", json=payload)
+        if res.status_code != 200:
+            log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+            return False
+            
+        # Wait for completion
+        for _ in res.iter_lines(): pass
+        
+        # Verify Failure in History
+        res = requests.get(f"{BASE_URL}/api/history")
+        latest_run_data = res.json()[0]
+        run_name = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+        status = latest_run_data.get('status') if isinstance(latest_run_data, dict) else 'UNKNOWN'
+        
+        if status == 'FAIL':
+            log(f"Run {run_name} correctly flagged as FAIL", "PASS")
+        else:
+            log(f"Run {run_name} status is {status}, expected FAIL", "FAIL")
+            return False
+
+        # --- Step 2: Re-run with Success ---
+        log("Step 2: Simulating Re-run with fixed script...", "INFO")
+        rerun_signature = "ANALYSIS_UPDATED_SUCCESSFULLY"
+        with open(script_path, 'w') as f:
+            f.write(f"print('{rerun_signature}')")
+            
+        # Call Re-analyze
+        res = requests.post(f"{BASE_URL}/reanalyze", json={"folder": run_name}, stream=True)
+        if res.status_code != 200:
+            log(f"Re-analyze failed: {res.status_code}", "FAIL")
+            return False
+            
+        # Consume stream
+        for _ in res.iter_lines(): pass
+        
+        # Verify Report Updated
+        report_url = f"{BASE_URL}/results/{run_name}/neuro_san_report.html"
+        res = requests.get(report_url)
+        if res.status_code == 200 and rerun_signature in res.text:
+            log("Neuro-San analysis updated successfully after re-run", "PASS")
+        else:
+            log("Neuro-San analysis did NOT update", "FAIL")
+            return False
+            
+        return True
+
+    finally:
+        # Cleanup: Restore original script or delete dummy
+        if original_content:
+            with open(script_path, 'w') as f:
+                f.write(original_content)
+        elif os.path.exists(script_path):
+            os.remove(script_path)
+
+def test_neuro_san_custom_config():
+    log("Testing Neuro-San custom configuration...", "INFO")
+    
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_path = os.path.join(base_dir, 'neuro-san-studio')
+    script_path = os.path.join(repo_path, 'process.py')
+    
+    # Ensure directory exists
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path)
+    
+    # Backup existing script if any
+    original_content = None
+    if os.path.exists(script_path):
+        with open(script_path, 'r') as f:
+            original_content = f.read()
+            
+    try:
+        # Create script that reads config
+        script_content = """
+import argparse
+import yaml
+import sys
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--results')
+parser.add_argument('--inputs')
+parser.add_argument('--raw-results')
+parser.add_argument('--config')
+args, unknown = parser.parse_known_args()
+
+if args.config:
+    try:
+        with open(args.config, 'r') as f:
+            conf = yaml.safe_load(f)
+            print(f"CONFIG_VALUE:{conf.get('test_key')}")
+    except Exception as e:
+        print(f"Error reading config: {e}")
+else:
+    print("No config argument received")
+"""
+        with open(script_path, 'w') as f:
+            f.write(script_content)
+            
+        # Run Pipeline
+        input_data = {
+            "api_collection": {"endpoints": [{"method": "GET", "url": "https://httpbin.org/get"}]},
+            "sla": {"http_req_duration_p95_ms": 500},
+            "workload_scenario": {"executor": "constant-vus", "vus": 1, "duration": "1s"},
+            "neuro_san_config": {"test_key": "VERIFY_CONFIG_PASS"}
+        }
+        
+        payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+        
+        res = requests.post(f"{BASE_URL}/run", json=payload)
+        if res.status_code != 200:
+            log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+            return False
+            
+        # Wait for completion
+        for _ in res.iter_lines(): pass
+        
+        # Verify Output
+        res = requests.get(f"{BASE_URL}/api/history")
+        latest_run_data = res.json()[0]
+        run_name = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+        
+        summary_res = requests.get(f"{BASE_URL}/results/{run_name}/summary.md")
+        
+        if "CONFIG_VALUE:VERIFY_CONFIG_PASS" in summary_res.text:
+            log("Custom configuration passed to Neuro-San script successfully", "PASS")
+            return True
+        else:
+            log("Custom configuration verification failed", "FAIL")
+            return False
+
+    finally:
+        # Restore
+        if original_content:
+            with open(script_path, 'w') as f:
+                f.write(original_content)
+        elif os.path.exists(script_path):
+            os.remove(script_path)
+
+def test_neuro_san_preflight_failure():
+    log("Testing Neuro-San pre-flight failure...", "INFO")
+    
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_path = os.path.join(base_dir, 'neuro-san-studio')
+    script_path = os.path.join(repo_path, 'preflight.py')
+    
+    # Ensure directory exists
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path)
+    
+    # Backup existing script if any
+    original_content = None
+    if os.path.exists(script_path):
+        with open(script_path, 'r') as f:
+            original_content = f.read()
+            
+    try:
+        # Create failing pre-flight script
+        with open(script_path, 'w') as f:
+            f.write("import sys; print('PRE-FLIGHT CHECK FAILED'); sys.exit(1)")
+            
+        # Run Pipeline
+        input_data = {
+            "api_collection": {"endpoints": [{"method": "GET", "url": "https://httpbin.org/get"}]},
+            "sla": {"http_req_duration_p95_ms": 500},
+            "workload_scenario": {"executor": "constant-vus", "vus": 1, "duration": "1s"}
+        }
+        
+        payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+        
+        res = requests.post(f"{BASE_URL}/run", json=payload)
+        # Note: Server returns 200 even if pipeline fails internally, we check history for status
+        
+        # Wait for completion
+        for _ in res.iter_lines(): pass
+        
+        # Verify Output
+        res = requests.get(f"{BASE_URL}/api/history")
+        latest_run_data = res.json()[0]
+        status = latest_run_data.get('status') if isinstance(latest_run_data, dict) else 'UNKNOWN'
+        
+        if status == 'PRE-FLIGHT FAILED':
+            log("Run correctly flagged as PRE-FLIGHT FAILED", "PASS")
+            return True
+        else:
+            log(f"Run status is {status}, expected PRE-FLIGHT FAILED", "FAIL")
+            return False
+
+    finally:
+        # Restore
+        if original_content:
+            with open(script_path, 'w') as f:
+                f.write(original_content)
+        elif os.path.exists(script_path):
+            os.remove(script_path)
+
 def main():
     print("=== Starting Verification Script ===\n")
     
@@ -169,6 +501,10 @@ def main():
     test_pipeline_execution()
     test_history_and_comparison()
     test_delete_run()
+    test_neuro_san_integration()
+    test_neuro_san_failure_and_rerun()
+    test_neuro_san_custom_config()
+    test_neuro_san_preflight_failure()
     
     print("\n=== Verification Complete ===")
 
