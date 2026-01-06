@@ -347,6 +347,38 @@
                       here.
                     </div>
                   </div>
+                  <div class="mb-3">
+                    <label class="form-label"
+                      >Test Data (CSV)
+                      <span class="badge bg-secondary">Optional</span></label
+                    >
+                    <div class="input-group">
+                      <input
+                        class="form-control"
+                        type="file"
+                        id="csvUpload"
+                        accept=".csv,.zip"
+                      />
+                      <button
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        onclick="previewCsv()"
+                      >
+                        Preview
+                      </button>
+                      <button
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        id="clearCsvBtn"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div class="form-text">
+                      Upload a CSV file to parameterize your test (e.g.
+                      username, password).
+                    </div>
+                  </div>
                 </div>
                 <!-- Jira Input -->
                 <div class="tab-pane fade" id="jira-pane">
@@ -671,28 +703,25 @@
                 <!-- System Health Pane -->
                 <div class="tab-pane fade p-3" id="health-pane">
                   <div
-                    id="dockerInfo"
                     class="mb-3 p-2 bg-dark text-light rounded"
-                    style="display: none; font-size: 0.85rem"
+                    style="font-size: 0.85rem"
                   >
-                    <div class="d-flex justify-content-between mb-1">
-                      <span
-                        ><strong>Container ID:</strong>
-                        <span id="containerId"></span
-                      ></span>
-                      <span
-                        ><strong>Mem Limit:</strong> <span id="memLimit"></span
-                      ></span>
-                    </div>
                     <div class="d-flex justify-content-between">
                       <span
-                        ><strong>Docker Health:</strong>
-                        <span id="healthStatus"></span
-                      ></span>
-                      <span></span>
+                        ><strong>Hostname:</strong>
+                        <span id="sysHostname">...</span></span
+                      >
+                      <span
+                        ><strong>OS:</strong> <span id="sysOS">...</span></span
+                      >
                     </div>
                   </div>
-                  <div class="mb-3 text-end font-monospace" style="font-size: 0.85rem;">Uptime: <span id="sysUptime">--:--:--</span></div>
+                  <div
+                    class="mb-3 text-end font-monospace"
+                    style="font-size: 0.85rem"
+                  >
+                    Uptime: <span id="sysUptime">--:--:--</span>
+                  </div>
                   <h6 class="mb-2">CPU Usage</h6>
                   <div class="progress mb-4" style="height: 25px">
                     <div
@@ -752,6 +781,14 @@
                 id="smokeLogBtn"
               >
                 Smoke Log
+              </button>
+              <button
+                onclick="viewExtractedFiles()"
+                class="btn btn-sm btn-outline-dark ms-2"
+                id="extractedFilesBtn"
+                style="display: none"
+              >
+                Extracted Files
               </button>
             </div>
           </div>
@@ -1047,6 +1084,54 @@
       </div>
     </div>
 
+    <!-- CSV Preview Modal -->
+    <div
+      class="modal fade"
+      id="csvPreviewModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div
+        class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"
+      >
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">CSV Preview</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body bg-light">
+            <textarea
+              id="csvEditContent"
+              class="form-control font-monospace"
+              rows="15"
+              style="font-size: 0.85rem"
+            ></textarea>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick="saveCsvContent()"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Neuro-San Report Modal -->
     <div class="modal fade" id="neuroSanModal" tabindex="-1" aria-hidden="true">
       <div
@@ -1067,6 +1152,96 @@
               id="neuroSanFrame"
               style="width: 100%; height: 100%; border: none"
             ></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extracted Files Modal -->
+    <div
+      class="modal fade"
+      id="extractedFilesModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Extracted Files</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group mb-3">
+              <input type="file" class="form-control" id="newExtractedFile" />
+              <button
+                class="btn btn-outline-secondary"
+                type="button"
+                onclick="uploadExtractedFile()"
+              >
+                Upload
+              </button>
+              <button
+                class="btn btn-outline-secondary"
+                type="button"
+                onclick="createExtractedFile()"
+              >
+                New File
+              </button>
+            </div>
+            <ul class="list-group" id="extractedFilesList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Extracted File Modal -->
+    <div
+      class="modal fade"
+      id="editExtractedFileModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              Edit File: <span id="editFileName"></span>
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <textarea
+              id="editFileContent"
+              class="form-control font-monospace"
+              rows="20"
+              style="font-size: 0.85rem"
+            ></textarea>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick="saveExtractedFile()"
+            >
+              Save Changes
+            </button>
           </div>
         </div>
       </div>
@@ -1094,6 +1269,90 @@
             document.getElementById("fileContent").value = e.target.result;
           };
           reader.readAsText(file);
+        });
+
+      // CSV Upload Handler
+      let csvContent = null;
+      let csvFileName = "data.csv";
+
+      document
+        .getElementById("csvUpload")
+        .addEventListener("change", function (e) {
+          const file = e.target.files[0];
+          if (!file) {
+            csvContent = null;
+            return;
+          }
+          csvFileName = file.name;
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            csvContent = e.target.result;
+          };
+          if (file.name.endsWith(".zip")) {
+            reader.readAsDataURL(file);
+          } else {
+            reader.readAsText(file);
+          }
+        });
+
+      function previewCsv() {
+        if (!csvContent) {
+          alert("No CSV file selected.");
+          return;
+        }
+        if (csvFileName.endsWith(".zip")) {
+          alert(
+            "Cannot preview ZIP files. They will be extracted during execution."
+          );
+          return;
+        }
+        const el = document.getElementById("csvPreviewModal");
+        let modal = bootstrap.Modal.getInstance(el);
+        if (!modal) {
+          modal = new bootstrap.Modal(el);
+        }
+        document.getElementById("csvEditContent").value = csvContent;
+        modal.show();
+      }
+
+      function saveCsvContent() {
+        const content = document.getElementById("csvEditContent").value;
+
+        // Validation
+        const lines = content.trim().split(/\r?\n/);
+        if (lines.length === 0 || (lines.length === 1 && !lines[0].trim())) {
+          alert("Validation Error: CSV content is empty.");
+          return;
+        }
+
+        const headers = lines[0].split(",");
+        if (headers.some((h) => !h.trim())) {
+          if (
+            !confirm(
+              "Warning: Header row contains empty column names. Continue?"
+            )
+          )
+            return;
+        }
+
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) {
+            alert(`Validation Error: Row ${i + 1} is empty.`);
+            return;
+          }
+        }
+
+        csvContent = content;
+        const el = document.getElementById("csvPreviewModal");
+        const modal = bootstrap.Modal.getInstance(el);
+        if (modal) modal.hide();
+      }
+
+      document
+        .getElementById("clearCsvBtn")
+        .addEventListener("click", function () {
+          document.getElementById("csvUpload").value = "";
+          csvContent = null;
         });
 
       function toggleChat() {
@@ -1228,6 +1487,11 @@
             window.currentResultPath = urlPath;
             resultLinks.style.display = "block";
           }
+
+          if (data.message.includes("[INFO] Extracted test data from")) {
+            const btn = document.getElementById("extractedFilesBtn");
+            if (btn) btn.style.display = "inline-block";
+          }
         } else if (data.type === "done") {
           statusBadge.className =
             data.code.code === 0 ? "badge bg-success" : "badge bg-danger";
@@ -1294,11 +1558,57 @@
             webhookUrl: document.getElementById("webhookUrl").value,
           };
         } else {
-          payload.fileContent = document.getElementById("fileContent").value;
+          let content = document.getElementById("fileContent").value;
+          if (csvContent) {
+            const testDataBlock = {
+              test_data: {
+                file: csvFileName,
+                content: csvContent,
+              },
+            };
+
+            // Check if content has fences
+            if (content.includes("```")) {
+              content += `\n\n\`\`\`json\n${JSON.stringify(
+                testDataBlock,
+                null,
+                2
+              )}\n\`\`\``;
+            } else {
+              let merged = false;
+              try {
+                const obj = JSON.parse(content);
+                obj.test_data = testDataBlock.test_data;
+                content = JSON.stringify(obj, null, 2);
+                merged = true;
+              } catch (e) {}
+
+              if (!merged) {
+                try {
+                  const obj = jsyaml.load(content);
+                  if (typeof obj === "object" && obj !== null) {
+                    obj.test_data = testDataBlock.test_data;
+                    content = jsyaml.dump(obj);
+                    merged = true;
+                  }
+                } catch (e) {}
+              }
+
+              if (!merged) {
+                content = `\`\`\`\n${content}\n\`\`\`\n\n\`\`\`json\n${JSON.stringify(
+                  testDataBlock,
+                  null,
+                  2
+                )}\n\`\`\``;
+              }
+            }
+          }
+          payload.fileContent = content;
         }
 
         // Reset UI
         clearConsole();
+        document.getElementById("extractedFilesBtn").style.display = "none";
         runBtn.disabled = true;
         runBtn.textContent = "Running...";
         stopBtn.disabled = false;
@@ -1381,6 +1691,272 @@
           content.textContent = await res.text();
         } catch (e) {
           content.textContent = "Error loading log: " + e.message;
+        }
+      }
+
+      async function deleteExtractedFile(folder, filename) {
+        if (!confirm(`Are you sure you want to delete ${filename}?`)) return;
+
+        try {
+          const res = await fetch("/api/delete-extracted-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder: folder, filename: filename }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            viewExtractedFiles(folder);
+          } else {
+            alert("Error deleting file: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      let currentEditFile = null;
+
+      async function editExtractedFile(folder, filename) {
+        currentEditFile = { folder, filename };
+        try {
+          const res = await fetch(`/results/${folder}/scripts/${filename}`);
+          if (!res.ok) throw new Error("Failed to load file content");
+          const content = await res.text();
+
+          document.getElementById("editFileName").textContent = filename;
+          document.getElementById("editFileContent").value = content;
+
+          const modal = new bootstrap.Modal(
+            document.getElementById("editExtractedFileModal")
+          );
+          modal.show();
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function saveExtractedFile() {
+        if (!currentEditFile) return;
+        const content = document.getElementById("editFileContent").value;
+
+        try {
+          const res = await fetch("/api/save-extracted-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folder: currentEditFile.folder,
+              filename: currentEditFile.filename,
+              content: content,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            const el = document.getElementById("editExtractedFileModal");
+            const modal = bootstrap.Modal.getInstance(el);
+            if (modal) modal.hide();
+          } else {
+            alert("Error saving file: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function renameExtractedFile(folder, filename) {
+        const newName = prompt("Enter new filename:", filename);
+        if (!newName || newName === filename) return;
+
+        try {
+          const res = await fetch("/api/rename-extracted-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folder: folder,
+              old_filename: filename,
+              new_filename: newName,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            viewExtractedFiles(folder);
+          } else {
+            alert("Error renaming file: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function duplicateExtractedFile(folder, filename) {
+        const newName = prompt(
+          "Enter new filename for duplicate:",
+          "copy_" + filename
+        );
+        if (!newName) return;
+
+        try {
+          const res = await fetch("/api/duplicate-extracted-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folder: folder,
+              filename: filename,
+              new_filename: newName,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            viewExtractedFiles(folder);
+          } else {
+            alert("Error duplicating file: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function viewExtractedFiles(folder) {
+        let targetPath = folder || window.currentResultPath;
+        if (!targetPath) {
+          alert("No result path found.");
+          return;
+        }
+
+        if (targetPath.startsWith("results/")) {
+          targetPath = targetPath.substring(8);
+        }
+
+        // Store for upload context
+        window.currentExtractedFolder = targetPath;
+
+        try {
+          const res = await fetch(
+            `/results/${targetPath}/extracted_files.json`
+          );
+          if (!res.ok) throw new Error("File list not found");
+          const files = await res.json();
+
+          const list = document.getElementById("extractedFilesList");
+          list.innerHTML = "";
+          files.forEach((f) => {
+            const li = document.createElement("li");
+            li.className =
+              "list-group-item small font-monospace d-flex justify-content-between align-items-center";
+
+            const span = document.createElement("span");
+            span.textContent = f;
+            li.appendChild(span);
+
+            if (!f.endsWith("/")) {
+              const div = document.createElement("div");
+
+              const a = document.createElement("a");
+              a.href = `/results/${targetPath}/scripts/${f}`;
+              a.className = "btn btn-sm btn-outline-primary py-0 me-2";
+              a.textContent = "Download";
+              a.setAttribute("download", "");
+              div.appendChild(a);
+
+              const editBtn = document.createElement("button");
+              editBtn.className = "btn btn-sm btn-outline-secondary py-0 me-2";
+              editBtn.textContent = "Edit";
+              editBtn.onclick = () => editExtractedFile(targetPath, f);
+              div.appendChild(editBtn);
+
+              const renameBtn = document.createElement("button");
+              renameBtn.className =
+                "btn btn-sm btn-outline-secondary py-0 me-2";
+              renameBtn.textContent = "Rename";
+              renameBtn.onclick = () => renameExtractedFile(targetPath, f);
+              div.appendChild(renameBtn);
+
+              const duplicateBtn = document.createElement("button");
+              duplicateBtn.className =
+                "btn btn-sm btn-outline-secondary py-0 me-2";
+              duplicateBtn.textContent = "Duplicate";
+              duplicateBtn.onclick = () =>
+                duplicateExtractedFile(targetPath, f);
+              div.appendChild(duplicateBtn);
+
+              const delBtn = document.createElement("button");
+              delBtn.className = "btn btn-sm btn-outline-danger py-0";
+              delBtn.textContent = "Delete";
+              delBtn.onclick = () => deleteExtractedFile(targetPath, f);
+              div.appendChild(delBtn);
+
+              li.appendChild(div);
+            }
+            list.appendChild(li);
+          });
+
+          const modal = new bootstrap.Modal(
+            document.getElementById("extractedFilesModal")
+          );
+          modal.show();
+        } catch (e) {
+          alert("Error loading extracted files: " + e.message);
+        }
+      }
+
+      async function uploadExtractedFile() {
+        const fileInput = document.getElementById("newExtractedFile");
+        const file = fileInput.files[0];
+        if (!file) {
+          alert("Please select a file.");
+          return;
+        }
+        if (!window.currentExtractedFolder) {
+          alert("No active folder context.");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder", window.currentExtractedFolder);
+
+        try {
+          const res = await fetch("/api/upload-extracted-file", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          if (res.ok) {
+            fileInput.value = "";
+            viewExtractedFiles(window.currentExtractedFolder);
+          } else {
+            alert("Error uploading file: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+        }
+      }
+
+      async function createExtractedFile() {
+        if (!window.currentExtractedFolder) {
+          alert("No active folder context.");
+          return;
+        }
+
+        const filename = prompt("Enter new filename:");
+        if (!filename) return;
+
+        try {
+          const res = await fetch("/api/create-extracted-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              folder: window.currentExtractedFolder,
+              filename: filename,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            viewExtractedFiles(window.currentExtractedFolder);
+          } else {
+            alert("Error creating file: " + (data.error || "Unknown error"));
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
         }
       }
 
@@ -1691,6 +2267,11 @@
               preflightBtn = `<button onclick="viewLog('preflight_log.txt', 'results/${folder}')" class="btn btn-sm btn-outline-warning py-0" style="font-size: 0.75rem;">Pre-flight Log</button>`;
             }
 
+            let extractedBtn = "";
+            if (itemData.has_extracted) {
+              extractedBtn = `<button onclick="viewExtractedFiles('${folder}')" class="btn btn-sm btn-outline-dark py-0" style="font-size: 0.75rem;">Files</button>`;
+            }
+
             const item = document.createElement("div");
             item.className = "list-group-item";
 
@@ -1716,6 +2297,7 @@
                         ${badgeHtml}
                         ${statusBadge}
                         ${preflightBtn}
+                        ${extractedBtn}
                       </div>
                       <div>
                         <a href="/results/${folder}/summary.md" target="_blank" class="btn btn-sm btn-outline-primary py-0" style="font-size: 0.75rem;">Summary</a>
@@ -2249,29 +2831,11 @@
             memBar.style.width = data.memory_percent + "%";
             memBar.textContent = data.memory_percent.toFixed(1) + "%";
             document.getElementById("sysUptime").textContent = data.uptime;
-
-            // Docker Info
-            const dockerDiv = document.getElementById("dockerInfo");
-            if (data.docker && data.docker.is_docker) {
-              dockerDiv.style.display = "block";
-              document.getElementById("containerId").textContent =
-                data.docker.container_id;
-              document.getElementById("memLimit").textContent =
-                data.docker.memory_limit || "Unknown";
-
-              const healthSpan = document.getElementById("healthStatus");
-              const status = data.docker.health_status || "Unknown";
-              healthSpan.textContent = status;
-
-              // Color coding
-              if (status === "healthy")
-                healthSpan.className = "text-success fw-bold";
-              else if (status === "unhealthy")
-                healthSpan.className = "text-danger fw-bold";
-              else healthSpan.className = "text-warning";
-            } else {
-              dockerDiv.style.display = "none";
-            }
+            if (document.getElementById("sysHostname"))
+              document.getElementById("sysHostname").textContent =
+                data.hostname;
+            if (document.getElementById("sysOS"))
+              document.getElementById("sysOS").textContent = data.os_info;
           } catch (e) {
             console.error("Health monitor failed:", e);
             stopHealthMonitor(); // Stop polling on error

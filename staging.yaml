@@ -1,4 +1,0 @@
-jira_url: "https://staging.atlassian.net"
-jira_key: "STAGING-404"
-jira_auth: "${JIRA_STAGING_TOKEN}"
-output_dir: "./results_staging"

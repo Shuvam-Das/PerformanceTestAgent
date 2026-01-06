@@ -487,6 +487,68 @@ def test_neuro_san_preflight_failure():
             log(f"Run status is {status}, expected PRE-FLIGHT FAILED", "FAIL")
             return False
 
+def test_csv_data_driving():
+    log("Testing CSV data driving capability...", "INFO")
+    
+    csv_content = "username,password\nuser1,pass1\nuser2,pass2"
+    
+    input_data = {
+        "api_collection": {
+            "endpoints": [
+                {
+                    "method": "POST", 
+                    "url": "https://httpbin.org/post",
+                    "body": {
+                        "user": "{{username}}",
+                        "pass": "{{password}}"
+                    }
+                }
+            ]
+        },
+        "workload_scenario": {"executor": "shared-iterations", "vus": 1, "iterations": 2},
+        "test_data": {
+            "file": "users.csv",
+            "content": csv_content
+        }
+    }
+    
+    payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+    
+    res = requests.post(f"{BASE_URL}/run", json=payload)
+    if res.status_code != 200:
+        log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+        return False
+        
+    # Wait for completion
+    for _ in res.iter_lines(): pass
+    
+    # Verify Output
+    res = requests.get(f"{BASE_URL}/api/history")
+    latest_run_data = res.json()[0]
+    run_name = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+    
+    # Check script.js for CSV logic
+    script_res = requests.get(f"{BASE_URL}/results/{run_name}/scripts/script.js")
+    if script_res.status_code == 200:
+        script_content = script_res.text
+        if "SharedArray" in script_content and "papaparse" in script_content and "users.csv" in script_content:
+             log("Generated script contains CSV data loading logic", "PASS")
+        else:
+             log("Generated script missing CSV logic", "FAIL")
+             return False
+    else:
+        log("Failed to retrieve generated script", "FAIL")
+        return False
+
+    # Check if CSV file exists
+    csv_res = requests.get(f"{BASE_URL}/results/{run_name}/scripts/users.csv")
+    if csv_res.status_code == 200 and csv_res.text == csv_content:
+        log("CSV file correctly saved in scripts directory", "PASS")
+        return True
+    else:
+        log("CSV file missing or content mismatch", "FAIL")
+        return False
+
     finally:
         # Restore
         if original_content:
@@ -513,6 +575,8 @@ def main():
     test_neuro_san_failure_and_rerun()
     test_neuro_san_custom_config()
     test_neuro_san_preflight_failure()
+    test_csv_data_driving()
+    test_advanced_generator_features()
     
     print("\n=== Verification Complete ===")
 

@@ -9,6 +9,7 @@ import zipfile
 import yaml
 import shutil
 import psutil
+import platform
 import socket
 import webbrowser
 import threading
@@ -243,6 +244,8 @@ def history():
                 if os.path.exists(os.path.join(full_path, 'preflight_failed.flag')):
                     status = 'PRE-FLIGHT FAILED'
                 
+                has_extracted = os.path.exists(os.path.join(full_path, 'extracted_files.json'))
+                
                 if os.path.exists(sla_path):
                     try:
                         with open(sla_path, 'r') as f:
@@ -250,7 +253,7 @@ def history():
                             status = 'PASS' if sla_data.get('pass') else 'FAIL'
                     except: pass
                 
-                items.append({'name': d, 'enhanced': enhanced, 'status': status})
+                items.append({'name': d, 'enhanced': enhanced, 'status': status, 'has_extracted': has_extracted})
         
         items.sort(key=lambda x: x['name'], reverse=True)
         return jsonify(items)
@@ -318,6 +321,273 @@ def delete_run():
             deleted.append(folder)
             
     return jsonify({'deleted': deleted})
+
+@app.route('/api/delete-extracted-file', methods=['POST'])
+def delete_extracted_file():
+    data = request.json
+    folder = data.get('folder')
+    filename = data.get('filename')
+    
+    if not folder or not filename:
+        return jsonify({'error': 'Folder and filename required'}), 400
+    
+    # Security check
+    if '..' in folder or folder.startswith('/') or folder.startswith('\\'):
+         return jsonify({'error': 'Invalid folder'}), 400
+    if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+         return jsonify({'error': 'Invalid filename'}), 400
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    target_path = os.path.join(base_dir, 'results', folder, 'scripts', filename)
+    
+    try:
+        if os.path.exists(target_path):
+            if os.path.isdir(target_path):
+                 shutil.rmtree(target_path)
+            else:
+                 os.remove(target_path)
+        
+        # Update extracted_files.json
+        json_path = os.path.join(base_dir, 'results', folder, 'extracted_files.json')
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r') as f:
+                    files = json.load(f)
+                
+                if filename in files:
+                    files.remove(filename)
+                    with open(json_path, 'w') as f:
+                        json.dump(files, f)
+            except Exception as e:
+                print(f"Error updating extracted_files.json: {e}")
+                
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload-extracted-file', methods=['POST'])
+def upload_extracted_file():
+    folder = request.form.get('folder')
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    
+    if not folder or not file or file.filename == '':
+        return jsonify({'error': 'Folder and file required'}), 400
+    
+    # Security check
+    if '..' in folder or folder.startswith('/') or folder.startswith('\\'):
+         return jsonify({'error': 'Invalid folder'}), 400
+    
+    filename = file.filename
+    # Basic filename sanitization
+    if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+         return jsonify({'error': 'Invalid filename'}), 400
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    scripts_dir = os.path.join(base_dir, 'results', folder, 'scripts')
+    
+    if not os.path.exists(scripts_dir):
+        os.makedirs(scripts_dir, exist_ok=True)
+        
+    target_path = os.path.join(scripts_dir, filename)
+    try:
+        file.save(target_path)
+        
+        # Update extracted_files.json
+        json_path = os.path.join(base_dir, 'results', folder, 'extracted_files.json')
+        files = []
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r') as f:
+                    files = json.load(f)
+            except:
+                pass
+        
+        if filename not in files:
+            files.append(filename)
+            with open(json_path, 'w') as f:
+                json.dump(files, f)
+                
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/create-extracted-file', methods=['POST'])
+def create_extracted_file():
+    data = request.json
+    folder = data.get('folder')
+    filename = data.get('filename')
+    
+    if not folder or not filename:
+        return jsonify({'error': 'Folder and filename required'}), 400
+    
+    # Security check
+    if '..' in folder or folder.startswith('/') or folder.startswith('\\'):
+         return jsonify({'error': 'Invalid folder'}), 400
+    if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+         return jsonify({'error': 'Invalid filename'}), 400
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    scripts_dir = os.path.join(base_dir, 'results', folder, 'scripts')
+    
+    if not os.path.exists(scripts_dir):
+        os.makedirs(scripts_dir, exist_ok=True)
+        
+    target_path = os.path.join(scripts_dir, filename)
+    
+    try:
+        if os.path.exists(target_path):
+            return jsonify({'error': 'File already exists'}), 409
+            
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        with open(target_path, 'w') as f:
+            pass # Create empty file
+        
+        # Update extracted_files.json
+        json_path = os.path.join(base_dir, 'results', folder, 'extracted_files.json')
+        files = []
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r') as f:
+                    files = json.load(f)
+            except:
+                pass
+        
+        if filename not in files:
+            files.append(filename)
+            with open(json_path, 'w') as f:
+                json.dump(files, f)
+                
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/save-extracted-file', methods=['POST'])
+def save_extracted_file():
+    data = request.json
+    folder = data.get('folder')
+    filename = data.get('filename')
+    content = data.get('content', '')
+    
+    if not folder or not filename:
+        return jsonify({'error': 'Folder and filename required'}), 400
+    
+    # Security check
+    if '..' in folder or folder.startswith('/') or folder.startswith('\\'):
+         return jsonify({'error': 'Invalid folder'}), 400
+    if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+         return jsonify({'error': 'Invalid filename'}), 400
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    target_path = os.path.join(base_dir, 'results', folder, 'scripts', filename)
+    
+    try:
+        if not os.path.exists(target_path):
+            return jsonify({'error': 'File not found'}), 404
+            
+        with open(target_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+                
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/rename-extracted-file', methods=['POST'])
+def rename_extracted_file():
+    data = request.json
+    folder = data.get('folder')
+    old_filename = data.get('old_filename')
+    new_filename = data.get('new_filename')
+    
+    if not folder or not old_filename or not new_filename:
+        return jsonify({'error': 'Folder, old filename, and new filename required'}), 400
+    
+    # Security check
+    for name in [folder, old_filename, new_filename]:
+        if '..' in name or name.startswith('/') or name.startswith('\\'):
+             return jsonify({'error': 'Invalid path components'}), 400
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    scripts_dir = os.path.join(base_dir, 'results', folder, 'scripts')
+    old_path = os.path.join(scripts_dir, old_filename)
+    new_path = os.path.join(scripts_dir, new_filename)
+    
+    try:
+        if not os.path.exists(old_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        if os.path.exists(new_path):
+            return jsonify({'error': 'Destination file already exists'}), 409
+            
+        os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        os.rename(old_path, new_path)
+        
+        # Update extracted_files.json
+        json_path = os.path.join(base_dir, 'results', folder, 'extracted_files.json')
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r') as f:
+                    files = json.load(f)
+                
+                if old_filename in files:
+                    index = files.index(old_filename)
+                    files[index] = new_filename
+                    with open(json_path, 'w') as f:
+                        json.dump(files, f)
+            except Exception as e:
+                print(f"Error updating extracted_files.json: {e}")
+                
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/duplicate-extracted-file', methods=['POST'])
+def duplicate_extracted_file():
+    data = request.json
+    folder = data.get('folder')
+    filename = data.get('filename')
+    new_filename = data.get('new_filename')
+    
+    if not folder or not filename or not new_filename:
+        return jsonify({'error': 'Folder, filename, and new filename required'}), 400
+    
+    # Security check
+    for name in [folder, filename, new_filename]:
+        if '..' in name or name.startswith('/') or name.startswith('\\'):
+             return jsonify({'error': 'Invalid path components'}), 400
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    scripts_dir = os.path.join(base_dir, 'results', folder, 'scripts')
+    src_path = os.path.join(scripts_dir, filename)
+    dst_path = os.path.join(scripts_dir, new_filename)
+    
+    try:
+        if not os.path.exists(src_path):
+            return jsonify({'error': 'Source file not found'}), 404
+        
+        if os.path.exists(dst_path):
+            return jsonify({'error': 'Destination file already exists'}), 409
+            
+        shutil.copy2(src_path, dst_path)
+        
+        # Update extracted_files.json
+        json_path = os.path.join(base_dir, 'results', folder, 'extracted_files.json')
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r') as f:
+                    files = json.load(f)
+                
+                if new_filename not in files:
+                    files.append(new_filename)
+                    with open(json_path, 'w') as f:
+                        json.dump(files, f)
+            except Exception as e:
+                print(f"Error updating extracted_files.json: {e}")
+                
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/profiles', methods=['GET'])
 def list_profiles():
@@ -450,65 +720,11 @@ def system_health():
     health = {
         'cpu_percent': psutil.cpu_percent(interval=0.1),
         'memory_percent': psutil.virtual_memory().percent,
-        'uptime': str(timedelta(seconds=int(time.time() - START_TIME)))
+        'uptime': str(timedelta(seconds=int(time.time() - START_TIME))),
+        'hostname': socket.gethostname(),
+        'os_info': f"{platform.system()} {platform.release()}"
     }
     
-    # Docker Detection & Info
-    if os.path.exists('/.dockerenv'):
-        health['docker'] = {
-            'is_docker': True,
-            'container_id': socket.gethostname()
-        }
-        # Try to read memory limit (supports cgroup v1 and v2)
-        try:
-            mem_limit = None
-            if os.path.exists('/sys/fs/cgroup/memory.max'): # cgroup v2
-                with open('/sys/fs/cgroup/memory.max', 'r') as f:
-                    val = f.read().strip()
-                    if val.isdigit(): mem_limit = int(val)
-            elif os.path.exists('/sys/fs/cgroup/memory/memory.limit_in_bytes'): # cgroup v1
-                with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
-                    mem_limit = int(f.read().strip())
-            
-            if mem_limit:
-                health['docker']['memory_limit'] = f"{mem_limit / (1024*1024):.0f} MB"
-            else:
-                health['docker']['memory_limit'] = "Unlimited"
-        except:
-            health['docker']['memory_limit'] = "Unknown"
-            
-        # Try to get Health Status via Docker Socket
-        sock_path = '/var/run/docker.sock'
-        health_status = "Unknown (Socket not mounted)"
-        if os.path.exists(sock_path):
-            try:
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.settimeout(2)
-                s.connect(sock_path)
-                # HTTP/1.0 to avoid chunked encoding complexity
-                req = f"GET /containers/{socket.gethostname()}/json HTTP/1.0\r\n\r\n"
-                s.sendall(req.encode())
-                
-                resp = b""
-                while True:
-                    data = s.recv(4096)
-                    if not data: break
-                    resp += data
-                s.close()
-                
-                parts = resp.split(b'\r\n\r\n', 1)
-                if len(parts) > 1:
-                    body = parts[1].decode('utf-8', errors='ignore')
-                    if '{' in body: # Simple check to find start of JSON
-                        info = json.loads(body[body.find('{'):])
-                        health_status = info.get('State', {}).get('Health', {}).get('Status', 'No Healthcheck')
-            except Exception as e:
-                health_status = f"Query Error"
-        
-        health['docker']['health_status'] = health_status
-    else:
-        health['docker'] = {'is_docker': False}
-        
     return jsonify(health)
 
 @app.route('/api/chat', methods=['POST'])

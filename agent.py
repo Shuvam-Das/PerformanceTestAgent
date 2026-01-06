@@ -10,6 +10,9 @@ import threading
 import math
 import time
 import html
+import base64
+import zipfile
+import io
 from datetime import datetime
 
 try:
@@ -252,26 +255,55 @@ class GeneratorAgent:
             f.write(script_content)
         log_comm("GeneratorAgent", "MasterAgent", f"Script generated at {context.script_path}")
 
+        # Handle Test Data (CSV)
+        if context.inputs.get('test_data') and context.inputs['test_data'].get('content'):
+            csv_filename = context.inputs['test_data'].get('file', 'data.csv')
+            
+            if csv_filename.endswith('.zip'):
+                try:
+                    content = context.inputs['test_data']['content']
+                    if ',' in content:
+                        content = content.split(',', 1)[1]
+                    
+                    zip_data = base64.b64decode(content)
+                    with zipfile.ZipFile(io.BytesIO(zip_data), 'r') as zf:
+                        zf.extractall(scripts_dir)
+                        extracted_files = zf.namelist()
+                    
+                    with open(os.path.join(context.result_dir, 'extracted_files.json'), 'w') as f:
+                        json.dump(extracted_files, f)
+
+                    print(f"[INFO] Extracted test data from {csv_filename}", flush=True)
+                except Exception as e:
+                    print(f"[WARN] Failed to extract zip file: {e}", flush=True)
+            else:
+                csv_path = os.path.join(scripts_dir, csv_filename)
+                with open(csv_path, 'w', encoding='utf-8') as f:
+                    f.write(context.inputs['test_data']['content'])
+
 class ValidationAgent:
     def run(self, context: PipelineContext):
         log_comm("ValidationAgent", "MasterAgent", "Validating script (Lint + Smoke Test)...")
         print("[STATUS] Stage: Script Validation", flush=True)
         # ESLint
-        try:
-            cmd = ['npx', 'eslint', '--fix', context.script_path]
-            context.log_verbose(f"Executing: {' '.join(cmd)}")
-            lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
-            if lint_res.returncode != 0:
-                print("\n[AGENT] The generated script has some issues.", flush=True)
-                print("[AGENT] I tried to fix them automatically, but some errors remain:", flush=True)
-                print(lint_res.stdout, flush=True)
-                print("[AGENT] This might be due to invalid characters or structure in your input data.", flush=True)
-                log_comm("ValidationAgent", "MasterAgent", "Linting failed.")
-                with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
-                    f.write(lint_res.stdout)
-                sys.exit(1)
-        except Exception as e:
-            print(f"[WARN] Linting skipped or failed to run: {e}", flush=True)
+        if shutil.which('npx'):
+            try:
+                cmd = ['npx', 'eslint', '--fix', context.script_path]
+                context.log_verbose(f"Executing: {' '.join(cmd)}")
+                lint_res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=False)
+                if lint_res.returncode != 0:
+                    print("\n[AGENT] The generated script has some issues.", flush=True)
+                    print("[AGENT] I tried to fix them automatically, but some errors remain:", flush=True)
+                    print(lint_res.stdout, flush=True)
+                    print("[AGENT] This might be due to invalid characters or structure in your input data.", flush=True)
+                    log_comm("ValidationAgent", "MasterAgent", "Linting failed.")
+                    with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
+                        f.write(lint_res.stdout)
+                    sys.exit(1)
+            except Exception as e:
+                print(f"[WARN] Linting skipped or failed to run: {e}", flush=True)
+        else:
+            print("[INFO] Linting skipped (Node.js/npx not found).", flush=True)
 
         # Smoke Run
         print("[STATUS] Stage: Smoke Run", flush=True)
@@ -317,58 +349,24 @@ class ExecutionAgent:
         if not context.args.dry_run:
             print("[STATUS] Stage: Full Test Execution", flush=True)
             
-            if context.args.parallel and context.args.parallel > 1:
-                print(f"[STATUS] Parallel Execution: Spawning {context.args.parallel} Docker containers", flush=True)
-                procs = []
-                abs_result_dir = os.path.abspath(context.result_dir)
-                # Get the script path relative to the result directory for Docker volume mapping
-                relative_script_path = os.path.relpath(context.script_path, context.result_dir).replace('\\', '/')
-                
-                for i in range(context.args.parallel):
-                    # Calculate execution segment (e.g., 0:0.5, 0.5:1)
-                    step = 1.0 / context.args.parallel
-                    start = i * step
-                    end = (i + 1) * step
-                    segment = f"{start}:{end}"
-                    
-                    summary_file = f"summary_export_{i}.json"
-                    results_file = f"test_results_{i}.json"
-                    context.result_files.append(os.path.join(context.result_dir, results_file))
-                    
-                    # Docker command to run k6 with execution segment
-                    cmd = [
-                        "docker", "run", "--rm",
-                        "-v", f"{abs_result_dir}:/results",
-                        "grafana/k6:latest", "run",
-                        "--execution-segment", segment,
-                        "--out", f"json=/results/{results_file}",
-                        "--summary-export", f"/results/{summary_file}",
-                        f"/results/{relative_script_path}"
-                    ]
-                    
-                    context.log_verbose(f"Starting container {i}: {' '.join(cmd)}")
-                    # Start process, redirect stderr to stdout for unified monitoring
-                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
-                
-            else:
-                # Local sequential execution
-                cmd = [
-                    'k6', 'run',
-                    '--out', f"json={context.summary_path}",
-                    '--summary-export', context.summary_export_path,
-                    context.script_path
-                ]
-                log_comm("ExecutionAgent", "MasterAgent", "Launching k6 process...")
-                context.result_files.append(context.summary_path)
-                context.log_verbose(f"Executing: {' '.join(cmd)}")
-                # Start process
-                try:
-                    context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
-                except FileNotFoundError:
-                    print("\n[AGENT] I can't find the 'k6' tool on this system.", flush=True)
-                    print("[AGENT] Please install k6 (https://k6.io/docs/get-started/installation/) and make sure it's in your system PATH.", flush=True)
-                    log_comm("ExecutionAgent", "MasterAgent", "k6 binary not found.")
-                    sys.exit(1)
+            # Local sequential execution
+            cmd = [
+                'k6', 'run',
+                '--out', f"json={context.summary_path}",
+                '--summary-export', context.summary_export_path,
+                context.script_path
+            ]
+            log_comm("ExecutionAgent", "MasterAgent", "Launching k6 process...")
+            context.result_files.append(context.summary_path)
+            context.log_verbose(f"Executing: {' '.join(cmd)}")
+            # Start process
+            try:
+                context.running_processes.append(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8'))
+            except FileNotFoundError:
+                print("\n[AGENT] I can't find the 'k6' tool on this system.", flush=True)
+                print("[AGENT] Please install k6 (https://k6.io/docs/get-started/installation/) and make sure it's in your system PATH.", flush=True)
+                log_comm("ExecutionAgent", "MasterAgent", "k6 binary not found.")
+                sys.exit(1)
         else:
             print("[STATUS] Dry Run: Skipping full test execution.", flush=True)
             with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:

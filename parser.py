@@ -39,13 +39,20 @@ def parse_input(config):
         "workload_scenario": None,
         "sla": None,
         "env": None,
-        "neuro_san_config": None
+        "neuro_san_config": None,
+        "test_data": None
     }
 
     # 2. Parsing Logic
     json_blocks = re.findall(r'```json([\s\S]*?)```', content)
     yaml_blocks = re.findall(r'```yaml([\s\S]*?)```', content)
-    plain_blocks = re.findall(r'```([\s\S]*?)```', content)
+    
+    # Capture generic blocks and filter out those that look like json/yaml blocks (to avoid duplicates)
+    plain_blocks_raw = re.findall(r'```([\s\S]*?)```', content)
+    plain_blocks = []
+    for block in plain_blocks_raw:
+        if not block.startswith(('json', 'yaml')):
+            plain_blocks.append(block)
 
     def try_parse(s, fmt):
         try:
@@ -55,9 +62,7 @@ def parse_input(config):
         except:
             return None
 
-    all_blocks = json_blocks + yaml_blocks
-    if not all_blocks:
-        all_blocks.extend(plain_blocks)
+    all_blocks = json_blocks + yaml_blocks + plain_blocks
     
     # Fallback: If no blocks found, try parsing the entire content
     if not all_blocks and content.strip():
@@ -125,7 +130,14 @@ def parse_input(config):
                 
                 if obj.get('neuro_san_config'):
                     result['neuro_san_config'] = obj['neuro_san_config']
+                
+                if obj.get('test_data'):
+                    result['test_data'] = obj['test_data']
             elif isinstance(obj, list) and len(obj) > 0 and obj[0].get('method') and obj[0].get('url'):
+                # Enrich endpoints if they are simple dicts
+                for ep in obj:
+                    if 'extract' not in ep: ep['extract'] = {}
+                    if 'assertions' not in ep: ep['assertions'] = []
                 result['api_collection'] = {'endpoints': obj}
 
     # 3. Endpoint Normalization
@@ -176,7 +188,9 @@ def extract_har_endpoints(entries):
             "method": method,
             "url": url,
             "headers": headers if headers else None,
-            "body": body
+            "body": body,
+            "extract": {},
+            "assertions": []
         })
     return endpoints
 
@@ -216,7 +230,9 @@ def extract_postman_endpoints(items):
                 "method": method,
                 "url": url,
                 "headers": headers if headers else None,
-                "body": body
+                "body": body,
+                "extract": {},
+                "assertions": []
             })
     return endpoints
 
@@ -241,7 +257,9 @@ def parse_curl(cmd_str):
                 'headers': {},
                 'body': None,
                 'url': None,
-                'name': 'Curl Request'
+                'name': 'Curl Request',
+                'extract': {},
+                'assertions': []
             }
             i += 1
             continue
