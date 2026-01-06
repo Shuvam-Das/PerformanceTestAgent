@@ -797,6 +797,11 @@ class NeuroSanAgent:
                 proc.wait()
                 full_output = "\n".join(output_lines)
                 
+                # Save log for pre-flight
+                if self.mode == 'pre-flight':
+                    with open(os.path.join(context.result_dir, 'preflight_log.txt'), 'w', encoding='utf-8') as f:
+                        f.write(full_output)
+
                 if proc.returncode == 0:
                     if self.mode == 'analysis' and context.summary_md:
                         context.summary_md += f"\n\n## 🧬 Neuro-San Analysis\n\n{full_output}\n"

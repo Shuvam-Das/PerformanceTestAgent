@@ -384,26 +384,38 @@
                 </div>
                 <!-- History Pane -->
                 <div class="tab-pane fade" id="history-pane">
-                  <div
-                    class="d-flex justify-content-between align-items-center mt-3 mb-2"
-                  >
-                    <h6 class="mb-0">Past Runs</h6>
-                    <button
-                      id="compareBtn"
-                      class="btn btn-sm btn-primary"
-                      disabled
-                      onclick="compareRuns()"
+                  <div class="d-flex align-items-center mt-3 mb-2">
+                    <h6 class="mb-0 me-3">Past Runs</h6>
+                    <select
+                      id="historyFilter"
+                      class="form-select form-select-sm w-auto"
+                      onchange="loadHistory()"
                     >
-                      Compare Selected (0)
-                    </button>
-                    <button
-                      id="deleteBtn"
-                      class="btn btn-sm btn-danger ms-2"
-                      disabled
-                      onclick="deleteRuns()"
-                    >
-                      Delete Selected
-                    </button>
+                      <option value="ALL">All Status</option>
+                      <option value="PASS">PASS</option>
+                      <option value="FAIL">FAIL</option>
+                      <option value="PRE-FLIGHT FAILED">
+                        PRE-FLIGHT FAILED
+                      </option>
+                    </select>
+                    <div class="ms-auto">
+                      <button
+                        id="compareBtn"
+                        class="btn btn-sm btn-primary"
+                        disabled
+                        onclick="compareRuns()"
+                      >
+                        Compare Selected (0)
+                      </button>
+                      <button
+                        id="deleteBtn"
+                        class="btn btn-sm btn-danger ms-2"
+                        disabled
+                        onclick="deleteRuns()"
+                      >
+                        Delete Selected
+                      </button>
+                    </div>
                   </div>
                   <div class="list-group" id="historyList">
                     <div class="text-center text-muted">
@@ -1324,8 +1336,9 @@
         URL.revokeObjectURL(url);
       }
 
-      async function viewLog(filename) {
-        if (!window.currentResultPath) {
+      async function viewLog(filename, path = null) {
+        const targetPath = path || window.currentResultPath;
+        if (!targetPath) {
           alert("No active result found.");
           return;
         }
@@ -1340,7 +1353,7 @@
         modal.show();
 
         try {
-          const res = await fetch(`/${window.currentResultPath}/${filename}`);
+          const res = await fetch(`/${targetPath}/${filename}`);
           if (!res.ok) throw new Error("Log file not found");
           content.textContent = await res.text();
         } catch (e) {
@@ -1610,11 +1623,22 @@
         selectedRuns = [];
         updateSelectionButtons();
         const list = document.getElementById("historyList");
+        const filterVal = document.getElementById("historyFilter")
+          ? document.getElementById("historyFilter").value
+          : "ALL";
+
         list.innerHTML =
           '<div class="text-center text-muted p-3">Loading...</div>';
         try {
           const res = await fetch("/api/history");
-          const folders = await res.json();
+          let folders = await res.json();
+
+          if (filterVal !== "ALL") {
+            folders = folders.filter((item) => {
+              const status = item.status || "UNKNOWN";
+              return status === filterVal;
+            });
+          }
 
           list.innerHTML = "";
           if (!folders || folders.length === 0) {
@@ -1638,6 +1662,11 @@
             else if (status === "PRE-FLIGHT FAILED")
               statusBadge =
                 '<span class="badge bg-dark ms-2" style="font-size: 0.65rem;">PRE-FLIGHT FAIL</span>';
+
+            let preflightBtn = "";
+            if (status === "PRE-FLIGHT FAILED") {
+              preflightBtn = `<button onclick="viewLog('preflight_log.txt', 'results/${folder}')" class="btn btn-sm btn-outline-warning py-0" style="font-size: 0.75rem;">Pre-flight Log</button>`;
+            }
 
             const item = document.createElement("div");
             item.className = "list-group-item";
@@ -1663,6 +1692,7 @@
                         <span class="fw-bold small">${folder}</span>
                         ${badgeHtml}
                         ${statusBadge}
+                        ${preflightBtn}
                       </div>
                       <div>
                         <a href="/results/${folder}/summary.md" target="_blank" class="btn btn-sm btn-outline-primary py-0" style="font-size: 0.75rem;">Summary</a>

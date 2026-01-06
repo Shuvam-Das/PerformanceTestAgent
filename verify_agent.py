@@ -474,7 +474,15 @@ def test_neuro_san_preflight_failure():
         
         if status == 'PRE-FLIGHT FAILED':
             log("Run correctly flagged as PRE-FLIGHT FAILED", "PASS")
-            return True
+            
+            # Verify log file
+            log_res = requests.get(f"{BASE_URL}/results/{latest_run_data['name']}/preflight_log.txt")
+            if log_res.status_code == 200 and "PRE-FLIGHT CHECK FAILED" in log_res.text:
+                log("Pre-flight log file verified", "PASS")
+                return True
+            else:
+                log("Pre-flight log file missing or incorrect", "FAIL")
+                return False
         else:
             log(f"Run status is {status}, expected PRE-FLIGHT FAILED", "FAIL")
             return False
