@@ -21,6 +21,9 @@ from generator import generate_k6_script
 from sla import evaluate_sla
 from report_generator import generate_pdf_report
 
+def log_comm(sender, receiver, message):
+    print(f"[AGENT_COMM] {sender}|{receiver}|{message}", flush=True)
+
 def compare_results(folder1, folder2):
     print(f"[STATUS] Comparing results: {folder1} vs {folder2}", flush=True)
     
@@ -122,6 +125,7 @@ class PipelineContext:
 
 class IngestionAgent:
     def run(self, context: PipelineContext):
+        log_comm("IngestionAgent", "MasterAgent", "Analyzing input source...")
         print("[STATUS] Stage: Input Ingestion", flush=True)
         
         # Determine config file path
@@ -218,9 +222,11 @@ class IngestionAgent:
             sys.exit(1)
         
         print(f"[STATUS] API Collection detected: {list(context.inputs['api_collection'].keys())[0]}", flush=True)
+        log_comm("IngestionAgent", "MasterAgent", "Input ingestion and validation successful.")
 
 class GeneratorAgent:
     def run(self, context: PipelineContext):
+        log_comm("GeneratorAgent", "MasterAgent", "Generating k6 script from inputs...")
         print("[STATUS] Stage: k6 Script Generation", flush=True)
         script_content = generate_k6_script(context.inputs)
         context.log_verbose(f"Generated script size: {len(script_content)} bytes")
@@ -243,9 +249,11 @@ class GeneratorAgent:
         context.script_path = os.path.join(scripts_dir, script_name)
         with open(context.script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
+        log_comm("GeneratorAgent", "MasterAgent", f"Script generated at {context.script_path}")
 
 class ValidationAgent:
     def run(self, context: PipelineContext):
+        log_comm("ValidationAgent", "MasterAgent", "Validating script (Lint + Smoke Test)...")
         print("[STATUS] Stage: Script Validation", flush=True)
         # ESLint
         try:
@@ -257,6 +265,7 @@ class ValidationAgent:
                 print("[AGENT] I tried to fix them automatically, but some errors remain:", flush=True)
                 print(lint_res.stdout, flush=True)
                 print("[AGENT] This might be due to invalid characters or structure in your input data.", flush=True)
+                log_comm("ValidationAgent", "MasterAgent", "Linting failed.")
                 with open(os.path.join(context.result_dir, 'lint_report.txt'), 'w', encoding='utf-8') as f:
                     f.write(lint_res.stdout)
                 sys.exit(1)
@@ -275,6 +284,7 @@ class ValidationAgent:
             print("\n[AGENT] The test script failed during a quick smoke test.", flush=True)
             print("[AGENT] This usually means there's a runtime error in the script logic.", flush=True)
             print("[AGENT] Please check the 'Smoke Log' artifact for detailed error messages.", flush=True)
+            log_comm("ValidationAgent", "MasterAgent", "Smoke test failed.")
             sys.exit(1)
 
         # Workload Scenario Check
@@ -286,10 +296,13 @@ class ValidationAgent:
         if not context.inputs.get('sla'):
             print("\n[AGENT] I need to know your success criteria (SLA) to run the test.", flush=True)
             print("[AGENT] Please add an 'sla' section to your input. For example: { \"sla\": { \"http_req_duration_p95_ms\": 500 } }", flush=True)
+            log_comm("ValidationAgent", "MasterAgent", "SLA missing. Aborting.")
             sys.exit(1)
+        log_comm("ValidationAgent", "MasterAgent", "Validation passed. Ready for execution.")
 
 class ExecutionAgent:
     def run(self, context: PipelineContext):
+        log_comm("ExecutionAgent", "MasterAgent", "Preparing execution environment...")
         context.sla_results = {"pass": None, "verdicts": {}}
         context.summary_path = os.path.join(context.result_dir, 'test_results.json')
         context.summary_export_path = os.path.join(context.result_dir, 'summary_export.json')
@@ -340,6 +353,7 @@ class ExecutionAgent:
                     '--summary-export', context.summary_export_path,
                     context.script_path
                 ]
+                log_comm("ExecutionAgent", "MasterAgent", "Launching k6 process...")
                 context.result_files.append(context.summary_path)
                 context.log_verbose(f"Executing: {' '.join(cmd)}")
                 # Start process
@@ -348,11 +362,13 @@ class ExecutionAgent:
                 except FileNotFoundError:
                     print("\n[AGENT] I can't find the 'k6' tool on this system.", flush=True)
                     print("[AGENT] Please install k6 (https://k6.io/docs/get-started/installation/) and make sure it's in your system PATH.", flush=True)
+                    log_comm("ExecutionAgent", "MasterAgent", "k6 binary not found.")
                     sys.exit(1)
         else:
             print("[STATUS] Dry Run: Skipping full test execution.", flush=True)
             with open(os.path.join(context.result_dir, 'sla_validation.json'), 'w') as f:
                 json.dump({"status": "skipped", "reason": "dry-run"}, f, indent=2)
+            log_comm("ExecutionAgent", "MasterAgent", "Dry run completed (no execution).")
 
 class MonitoringAgent:
     def __init__(self):
@@ -372,6 +388,7 @@ class MonitoringAgent:
         if not context.running_processes:
             return
 
+        log_comm("MonitoringAgent", "MasterAgent", f"Monitoring {len(context.running_processes)} active process(es)...")
         print(f"[STATUS] Stage: Monitoring {len(context.running_processes)} active process(es)", flush=True)
         
         if context.inputs.get('sla') and 'http_req_failed_rate_max' in context.inputs['sla']:
@@ -415,6 +432,7 @@ class MonitoringAgent:
             proc.wait()
             if proc.returncode != 0:
                 print(f"[ERROR] Process failed with code {proc.returncode}", flush=True)
+                log_comm("MonitoringAgent", "MasterAgent", f"Process failed with code {proc.returncode}")
                 sys.exit(1)
 
         # If parallel, merge results now that execution is complete
@@ -424,6 +442,7 @@ class MonitoringAgent:
             # Let's use the method we moved/copied to ExecutionAgent in previous steps, but since I removed it from ExecutionAgent in this diff,
             # I will add the merge_summaries method to this class or make it a standalone function.
             # I will add it to this class for cohesion.
+            log_comm("MonitoringAgent", "MasterAgent", "Merging parallel results...")
             self.merge_summaries(context.result_dir, context.args.parallel, context.summary_export_path)
 
     def tail_metrics(self, file_path, stop_event):
@@ -570,6 +589,7 @@ class MonitoringAgent:
 
 class AnalysisAgent:
     def run(self, context: PipelineContext):
+        log_comm("AnalysisAgent", "MasterAgent", "Analyzing results against SLA...")
         if not context.args.dry_run:
             print("[STATUS] Stage: SLA Evaluation", flush=True)
             metrics = {}
@@ -579,6 +599,7 @@ class AnalysisAgent:
             except Exception as e:
                 print("\n[AGENT] I couldn't read the test results.", flush=True)
                 print(f"[AGENT] This might mean the test crashed or didn't produce valid JSON output. Error: {e}", flush=True)
+                log_comm("AnalysisAgent", "MasterAgent", "Failed to read results.")
 
             context.log_verbose(f"Evaluating SLA against metrics: {list(metrics.get('metrics', {}).keys())}")
             context.sla_results = evaluate_sla(metrics, context.inputs['sla'])
@@ -601,6 +622,7 @@ class AnalysisAgent:
             except Exception as e:
                 print(f"[WARN] Failed to generate PDF report: {e}", flush=True)
 
+        log_comm("AnalysisAgent", "MasterAgent", "Generating Final Summary...")
         # AI-Driven Analysis
         ai_insights = ""
         if genai and not context.args.dry_run:
@@ -668,11 +690,13 @@ class AnalysisAgent:
                 print("[WARN] SLA Failed.", flush=True)
             else:
                 print("[SUCCESS] SLA Passed.", flush=True)
+            log_comm("AnalysisAgent", "MasterAgent", f"SLA Verdict: {'PASS' if context.sla_results['pass'] else 'FAIL'}")
         else:
             print("[SUCCESS] Dry Run Complete.", flush=True)
 
 class NotificationAgent:
     def run(self, context: PipelineContext):
+        log_comm("NotificationAgent", "MasterAgent", "Checking notification settings...")
         if context.args.notify:
             print(f"[STATUS] Sending notification to {context.args.notify}", flush=True)
             try:
@@ -707,9 +731,11 @@ class NotificationAgent:
                         print(f"[WARN] Notification failed: {resp.status_code} {resp.text}", flush=True)
             except Exception as e:
                 print(f"[WARN] Notification failed: {e}", flush=True)
+            log_comm("NotificationAgent", "MasterAgent", "Notification attempt finished.")
 
 class CleanupAgent:
     def run(self, context: PipelineContext):
+        log_comm("CleanupAgent", "MasterAgent", "Checking disk usage...")
         print("[STATUS] Stage: Cleanup Check", flush=True)
         threshold = context.args.cleanup_threshold
         output_dir = context.args.output_dir
@@ -739,6 +765,25 @@ class CleanupAgent:
                 _, used, _ = shutil.disk_usage(output_dir)
                 if (used / total) * 100 <= threshold:
                     break
+
+class MasterAgent:
+    def orchestrate(self, context, agents):
+        log_comm("MasterAgent", "ALL", "Initializing Multi-Agent Pipeline...")
+        
+        for agent in agents:
+            name = agent.__class__.__name__
+            log_comm("MasterAgent", name, f"Activating {name}")
+            
+            try:
+                agent.run(context)
+                log_comm(name, "MasterAgent", "Task completed successfully.")
+            except SystemExit as e:
+                log_comm(name, "MasterAgent", f"Agent halted pipeline with code {e.code}")
+                raise e
+            except Exception as e:
+                log_comm(name, "MasterAgent", f"CRITICAL FAILURE: {str(e)}")
+                raise e
+        log_comm("MasterAgent", "ALL", "Pipeline execution finished.")
 
 def main():
     print("[STATUS] Agent initialized and starting...", flush=True)
@@ -781,8 +826,8 @@ def main():
     ]
     
     # Orchestrate
-    for agent in agents:
-        agent.run(context)
+    master = MasterAgent()
+    master.orchestrate(context, agents)
 
 if __name__ == "__main__":
     main()

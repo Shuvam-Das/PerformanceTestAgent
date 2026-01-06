@@ -174,6 +174,83 @@
         background-color: white;
         border-top: 1px solid #dee2e6;
       }
+      /* Agent Orchestration Styles */
+      .agent-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        padding: 15px;
+        justify-content: center;
+        background-color: #f0f2f5;
+        border-radius: 8px;
+        margin-bottom: 15px;
+      }
+      .agent-card {
+        width: 140px;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
+        transition: all 0.3s ease;
+        opacity: 0.6;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+      .agent-card.active {
+        opacity: 1;
+        border-color: #0d6efd;
+        box-shadow: 0 0 10px rgba(13, 110, 253, 0.3);
+        transform: translateY(-2px);
+      }
+      .agent-card.error {
+        opacity: 1;
+        border-color: #dc3545;
+        background-color: #fff5f5;
+      }
+      .agent-icon {
+        font-size: 24px;
+        margin-bottom: 5px;
+        display: block;
+      }
+      .agent-name {
+        font-size: 0.8rem;
+        font-weight: bold;
+        margin-bottom: 0;
+      }
+      .agent-status {
+        font-size: 0.7rem;
+        color: #6c757d;
+      }
+      .comm-log {
+        height: 200px;
+        overflow-y: auto;
+        background: #252526;
+        color: #d4d4d4;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 0.8rem;
+        border-radius: 4px;
+      }
+      .comm-entry {
+        margin-bottom: 4px;
+        border-left: 3px solid #555;
+        padding-left: 8px;
+      }
+      .comm-sender {
+        color: #4ec9b0;
+        font-weight: bold;
+      }
+      .comm-arrow {
+        color: #808080;
+        margin: 0 5px;
+      }
+      .comm-receiver {
+        color: #ce9178;
+        font-weight: bold;
+      }
+      .comm-msg {
+        color: #d4d4d4;
+      }
     </style>
   </head>
   <body class="p-4">
@@ -458,6 +535,17 @@
                   <li class="nav-item">
                     <button
                       class="nav-link active"
+                      id="orchestration-tab"
+                      data-bs-toggle="tab"
+                      data-bs-target="#orchestration-pane"
+                      type="button"
+                    >
+                      Orchestration
+                    </button>
+                  </li>
+                  <li class="nav-item">
+                    <button
+                      class="nav-link"
                       id="console-tab"
                       data-bs-toggle="tab"
                       data-bs-target="#console-pane"
@@ -494,8 +582,24 @@
             </div>
             <div class="card-body p-0 d-flex flex-column" style="height: 400px">
               <div class="tab-content h-100">
+                <!-- Orchestration Pane -->
+                <div
+                  class="tab-pane fade show active h-100 p-3"
+                  id="orchestration-pane"
+                  style="overflow-y: auto"
+                >
+                  <div class="agent-grid" id="agentGrid">
+                    <!-- Agents will be generated here -->
+                  </div>
+                  <h6 class="mt-2 mb-2">Live Communication Bus</h6>
+                  <div class="comm-log" id="commLog">
+                    <div class="text-muted fst-italic">
+                      Waiting for pipeline start...
+                    </div>
+                  </div>
+                </div>
                 <!-- Console Pane -->
-                <div class="tab-pane fade show active h-100" id="console-pane">
+                <div class="tab-pane fade h-100" id="console-pane">
                   <div class="console-container">
                     <div class="console-toolbar">
                       <button
@@ -1010,6 +1114,11 @@
             return;
           }
 
+          if (data.message.startsWith("[AGENT_COMM] ")) {
+            handleAgentComm(data.message.substring(13));
+            // Don't return, let it log to console too
+          }
+
           const div = document.createElement("div");
 
           let levelClass = "log-default";
@@ -1067,6 +1176,7 @@
           runBtn.disabled = false;
           runBtn.textContent = "Run Pipeline";
           stopBtn.disabled = true;
+          addCommLog("System", "GUI", "Pipeline execution finished.");
         }
       }
 
@@ -1135,6 +1245,7 @@
         statusBadge.className = "badge bg-warning text-dark";
         statusBadge.textContent = "Running";
         resultLinks.style.display = "none";
+        resetAgentGrid();
 
         // Initialize Live Charts
         initLiveCharts();
@@ -2031,6 +2142,101 @@
         }
       }
 
+      // Agent Orchestration Logic
+      const agents = [
+        { id: "MasterAgent", name: "Master Agent", icon: "🧠" },
+        { id: "IngestionAgent", name: "Ingestion", icon: "📥" },
+        { id: "GeneratorAgent", name: "Generator", icon: "⚙️" },
+        { id: "ValidationAgent", name: "Validation", icon: "✅" },
+        { id: "ExecutionAgent", name: "Execution", icon: "🚀" },
+        { id: "MonitoringAgent", name: "Monitoring", icon: "📊" },
+        { id: "AnalysisAgent", name: "Analysis", icon: "📈" },
+        { id: "NotificationAgent", name: "Notification", icon: "🔔" },
+        { id: "CleanupAgent", name: "Cleanup", icon: "🧹" },
+      ];
+
+      function initAgentGrid() {
+        const grid = document.getElementById("agentGrid");
+        grid.innerHTML = "";
+        agents.forEach((agent) => {
+          const card = document.createElement("div");
+          card.className = "agent-card";
+          card.id = `card-${agent.id}`;
+          card.innerHTML = `
+            <span class="agent-icon">${agent.icon}</span>
+            <div class="agent-name">${agent.name}</div>
+            <div class="agent-status">Idle</div>
+          `;
+          grid.appendChild(card);
+        });
+      }
+
+      function resetAgentGrid() {
+        document.querySelectorAll(".agent-card").forEach((card) => {
+          card.className = "agent-card";
+          card.querySelector(".agent-status").textContent = "Idle";
+        });
+        document.getElementById("commLog").innerHTML = "";
+      }
+
+      function handleAgentComm(rawMsg) {
+        // Format: Sender|Receiver|Message
+        const parts = rawMsg.split("|");
+        if (parts.length < 3) return;
+
+        const sender = parts[0].trim();
+        const receiver = parts[1].trim();
+        const msg = parts.slice(2).join("|").trim();
+
+        addCommLog(sender, receiver, msg);
+        updateAgentStatus(sender, receiver, msg);
+      }
+
+      function addCommLog(sender, receiver, msg) {
+        const log = document.getElementById("commLog");
+        const entry = document.createElement("div");
+        entry.className = "comm-entry";
+
+        const time = new Date().toLocaleTimeString("en-US", { hour12: false });
+
+        entry.innerHTML = `
+          <span style="color: #666; font-size: 0.7rem;">[${time}]</span>
+          <span class="comm-sender">${sender}</span>
+          <span class="comm-arrow">➜</span>
+          <span class="comm-receiver">${receiver}</span>: 
+          <span class="comm-msg">${escapeHtml(msg)}</span>
+        `;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function updateAgentStatus(sender, receiver, msg) {
+        // Highlight sender
+        const senderCard = document.getElementById(`card-${sender}`);
+        if (senderCard) {
+          document
+            .querySelectorAll(".agent-card")
+            .forEach((c) => c.classList.remove("active"));
+          senderCard.classList.add("active");
+
+          if (
+            msg.toLowerCase().includes("fail") ||
+            msg.toLowerCase().includes("error")
+          ) {
+            senderCard.classList.add("error");
+            senderCard.querySelector(".agent-status").textContent = "Error";
+          } else if (msg.includes("Task completed")) {
+            senderCard.querySelector(".agent-status").textContent = "Done";
+          } else {
+            senderCard.querySelector(".agent-status").textContent =
+              "Working...";
+          }
+        }
+
+        // If Master activates someone, highlight that one too potentially,
+        // but usually the sender is the active one.
+      }
+
       // Load Config on Startup
       window.addEventListener("DOMContentLoaded", async () => {
         // Add listener for output tabs to start/stop health monitor
@@ -2043,6 +2249,7 @@
             });
           });
         checkServerStatus();
+        initAgentGrid();
         loadProfiles();
         try {
           const res = await fetch("/get-config");
