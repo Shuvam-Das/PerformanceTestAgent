@@ -91,9 +91,20 @@ def generate_k6_script(inputs):
 
     if api_collection and api_collection.get('endpoints'):
         for ep in api_collection['endpoints']:
-            method = ep['method'].lower()
-            # Map standard methods to k6 methods
-            if method == 'delete': method = 'del'
+            # GraphQL Support
+            if ep.get('graphql'):
+                method = 'POST'
+                gql = ep['graphql']
+                # Construct body structure for GraphQL
+                ep['body'] = {
+                    'query': gql.get('query', ''),
+                    'variables': gql.get('variables', {})
+                }
+                if not ep.get('headers'):
+                    ep['headers'] = {}
+                ep['headers']['Content-Type'] = 'application/json'
+            else:
+                method = ep['method'].upper()
             
             # Handle Postman variables in URL
             processed_url = re.sub(r'\{\{(?:base_?url|host|api_?url)\}\}', '${BASE_URL}', ep['url'], flags=re.IGNORECASE)
@@ -123,7 +134,7 @@ def generate_k6_script(inputs):
 
             script.append(f"  group('{ep.get('name', ep['url'])}', function() {{")
             script.append(f"    let params = {{ headers: {headers_str}, tags: {{ name: '{ep.get('name', 'Unnamed Request')}' }} }};")
-            script.append(f"    let res = http.{method}(`{url}`, {body_str}, params);")
+            script.append(f"    let res = http.request('{method}', `{url}`, {body_str}, params);")
             
             # Industry standard checks
             script.append("    const checkRes = check(res, {")

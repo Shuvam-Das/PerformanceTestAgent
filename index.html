@@ -379,6 +379,21 @@
                       username, password).
                     </div>
                   </div>
+                  <div class="mb-3">
+                    <label class="form-label"
+                      >Neuro-San Configuration
+                      <span class="badge bg-info text-dark"
+                        >Analysis</span
+                      ></label
+                    >
+                    <textarea
+                      class="form-control font-monospace"
+                      id="neuroSanConfig"
+                      rows="3"
+                      placeholder='{ "sensitivity": "high", "ai_model": "gpt-4" }'
+                      style="font-size: 0.85rem"
+                    ></textarea>
+                  </div>
                 </div>
                 <!-- Jira Input -->
                 <div class="tab-pane fade" id="jira-pane">
@@ -1282,6 +1297,7 @@
         .addEventListener("click", function () {
           document.getElementById("fileUpload").value = "";
           document.getElementById("fileContent").value = "";
+          document.getElementById("neuroSanConfig").value = "";
         });
 
       // File Upload Handler
@@ -1586,6 +1602,7 @@
           };
         } else {
           let content = document.getElementById("fileContent").value;
+          const nsConfig = document.getElementById("neuroSanConfig").value;
           if (csvContent) {
             const testDataBlock = {
               test_data: {
@@ -1630,6 +1647,30 @@
               }
             }
           }
+
+          // Merge Neuro-San Config
+          if (nsConfig.trim()) {
+            try {
+              const nsObj = JSON.parse(nsConfig);
+              // Try to parse content as JSON to merge cleanly
+              try {
+                const mainObj = JSON.parse(content);
+                mainObj.neuro_san_config = nsObj;
+                content = JSON.stringify(mainObj, null, 2);
+              } catch (e) {
+                // Append as block if main content isn't pure JSON
+                content += `\n\n\`\`\`json\n${JSON.stringify(
+                  { neuro_san_config: nsObj },
+                  null,
+                  2
+                )}\n\`\`\``;
+              }
+            } catch (e) {
+              alert("Invalid JSON in Neuro-San Configuration");
+              return;
+            }
+          }
+
           payload.fileContent = content;
         }
 

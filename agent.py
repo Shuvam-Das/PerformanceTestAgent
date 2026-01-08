@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import os
 import sys
 import json
@@ -19,6 +20,13 @@ try:
     from google import genai
 except ImportError:
     genai = None
+
+try:
+    # Official Python SDK for Model Context Protocol
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+except ImportError:
+    ClientSession = None
 
 from parser import parse_input
 from generator import generate_k6_script
@@ -122,12 +130,46 @@ class PipelineContext:
         self.result_files = []
         self.running_processes = []
         self.config = {}
+        self.mcp_sessions = {} # Store active MCP client sessions
+        self.mcp_params = {}   # Store server parameters for on-demand connections
 
     def log_verbose(self, msg):
         if self.args.verbose:
             print(f"[VERBOSE] {msg}", flush=True)
 
 class IngestionAgent:
+    async def fetch_via_mcp(self, url, headers=None):
+        if not ClientSession:
+            raise ImportError("mcp library not installed")
+            
+        # Configure Fetch MCP Server
+        server_params = StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-fetch"],
+            env=None
+        )
+        
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                
+                # Call fetch tool
+                # Note: Arguments depend on the specific implementation of the fetch server.
+                # Assuming standard 'fetch' tool taking 'url' and optional 'headers'.
+                args = {"url": url}
+                if headers:
+                    args["headers"] = headers
+                    
+                result = await session.call_tool("fetch", arguments=args)
+                
+                # Extract text content from result
+                content = ""
+                if result.content:
+                    for item in result.content:
+                        if hasattr(item, 'text'):
+                            content += item.text
+                return content
+
     def run(self, context: PipelineContext):
         log_comm("IngestionAgent", "MasterAgent", "Analyzing input source...")
         print("[STATUS] Stage: Input Ingestion", flush=True)
@@ -194,9 +236,29 @@ class IngestionAgent:
             elif config_defaults.get('file'):
                 final_file = config_defaults.get('file')
 
+        fetched_content = ""
+        
+        # Use MCP for Jira Fetching if available
+        if final_jira and ClientSession:
+            try:
+                log_comm("IngestionAgent", "MasterAgent", "Fetching Jira story via MCP...")
+                url = f"{final_jira['base_url']}/rest/api/2/issue/{final_jira['issue_key']}"
+                headers = {}
+                if final_jira.get('auth'):
+                    headers['Authorization'] = final_jira['auth']
+                
+                fetched_content = asyncio.run(self.fetch_via_mcp(url, headers))
+                # Parse JSON response to get description, similar to original logic
+                jira_data = json.loads(fetched_content)
+                fetched_content = jira_data.get('fields', {}).get('description', "")
+                print("[INFO] Jira content fetched successfully via MCP.", flush=True)
+            except Exception as e:
+                print(f"[WARN] MCP Fetch failed: {e}. Falling back to standard parser logic.", flush=True)
+
         config = {
             "jira": final_jira,
-            "file": final_file
+            "file": final_file,
+            "content": fetched_content
         }
         context.log_verbose(f"Configuration: {json.dumps(sanitize_dict(config), default=str)}")
 
@@ -227,6 +289,72 @@ class IngestionAgent:
         
         print(f"[STATUS] API Collection detected: {list(context.inputs['api_collection'].keys())[0]}", flush=True)
         log_comm("IngestionAgent", "MasterAgent", "Input ingestion and validation successful.")
+
+class MCPAgent:
+    def _ensure_npm_packages(self, packages):
+        npm_exe = shutil.which('npm')
+        if not npm_exe:
+            print("[WARN] npm not found. Skipping MCP package installation.", flush=True)
+            return
+
+        print(f"[INFO] Ensuring MCP packages are installed: {', '.join(packages)}", flush=True)
+        try:
+            # Use --no-save to avoid modifying package.json
+            cmd = [npm_exe, 'install', '--no-save'] + packages
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            print("[INFO] MCP packages installed successfully.", flush=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[WARN] Failed to install MCP packages: {e.stderr}", flush=True)
+        except Exception as e:
+            print(f"[WARN] Error installing MCP packages: {e}", flush=True)
+
+    def run(self, context: PipelineContext):
+        log_comm("MCPAgent", "MasterAgent", "Configuring MCP Servers...")
+        
+        if not ClientSession:
+            print("[WARN] mcp library not found. MCP features disabled.", flush=True)
+            return
+
+        # Ensure required NPM packages are installed
+        self._ensure_npm_packages([
+            "@modelcontextprotocol/server-filesystem",
+            "@modelcontextprotocol/server-postgres",
+            "@modelcontextprotocol/server-fetch",
+            "@modelcontextprotocol/server-github"
+        ])
+
+        # 1. Filesystem MCP
+        # Expose the results directory to the MCP ecosystem
+        fs_path = os.path.abspath(context.result_dir)
+        context.mcp_params['filesystem'] = StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-filesystem", fs_path],
+            env=None
+        )
+        log_comm("MCPAgent", "MasterAgent", f"Registered Filesystem MCP for {fs_path}")
+
+        # 2. PostgreSQL MCP
+        # Check for DB connection string in config or env
+        db_url = context.config.get('database_url') or os.environ.get('DATABASE_URL')
+        if db_url:
+            context.mcp_params['postgres'] = StdioServerParameters(
+                command="npx",
+                args=["-y", "@modelcontextprotocol/server-postgres", db_url],
+                env=None
+            )
+            log_comm("MCPAgent", "MasterAgent", "Registered PostgreSQL MCP")
+        else:
+            context.log_verbose("Skipping PostgreSQL MCP (no DATABASE_URL found)")
+
+        # 3. GitHub MCP
+        # Requires GITHUB_PERSONAL_ACCESS_TOKEN in env
+        if os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN'):
+            context.mcp_params['github'] = StdioServerParameters(
+                command="npx",
+                args=["-y", "@modelcontextprotocol/server-github"],
+                env=os.environ
+            )
+            log_comm("MCPAgent", "MasterAgent", "Registered GitHub MCP")
 
 class GeneratorAgent:
     def run(self, context: PipelineContext):
@@ -746,6 +874,10 @@ class NeuroSanAgent:
                 print(f"[WARN] Failed to install dependencies: {e}", flush=True)
                 log_comm("NeuroSanAgent", "MasterAgent", "Dependency installation failed.")
 
+        # 1.6 Ensure default scripts exist (Self-Healing/Auto-Provisioning)
+        self._ensure_script(repo_path, 'preflight.py', self._get_default_preflight_code())
+        self._ensure_script(repo_path, 'process.py', self._get_default_process_code())
+
         # 2. Attempt to bridge (Placeholder for specific API calls)
         print(f"[STATUS] Stage: Neuro-San {stage_label} (Found at {repo_path})", flush=True)
         log_comm("NeuroSanAgent", "MasterAgent", f"Delegating context to Neuro-San ({stage_label})...")
@@ -869,9 +1001,147 @@ class NeuroSanAgent:
             print(f"[WARN] Neuro-San integration failed: {e}", flush=True)
             log_comm("NeuroSanAgent", "MasterAgent", f"Error: {str(e)}")
 
+    def _ensure_script(self, repo_path, filename, content):
+        path = os.path.join(repo_path, filename)
+        if not os.path.exists(path):
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                print(f"[INFO] Created default {filename} in Neuro-San Studio.", flush=True)
+            except Exception as e:
+                print(f"[WARN] Failed to create default {filename}: {e}", flush=True)
+
+    def _get_default_preflight_code(self):
+        return """import sys
+import json
+import argparse
+import requests
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--inputs', required=True)
+    args, _ = parser.parse_known_args()
+
+    print("Running Pre-flight Checks...")
+    try:
+        with open(args.inputs, 'r') as f:
+            data = json.load(f)
+        
+        # Check 1: Base URL Reachability
+        base_url = data.get('env', {}).get('base_url')
+        if base_url:
+            print(f"Checking connectivity to {base_url}...")
+            try:
+                res = requests.get(base_url, timeout=5)
+                print(f"Status: {res.status_code}")
+                if res.status_code >= 500:
+                    print("Target returned 5xx error.")
+                    sys.exit(1)
+            except Exception as e:
+                print(f"Connection failed: {e}")
+                sys.exit(1)
+        else:
+            print("No base_url found in env. Skipping connectivity check.")
+            
+        print("Pre-flight Passed.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"Pre-flight Error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+"""
+
+    def _get_default_process_code(self):
+        return """import sys
+import json
+import argparse
+import os
+import yaml
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--inputs')
+    parser.add_argument('--results')
+    parser.add_argument('--raw-results')
+    parser.add_argument('--config')
+    args, _ = parser.parse_known_args()
+
+    print("Running Neuro-San Analysis...")
+    
+    # Load Config if present
+    config = {}
+    if args.config and os.path.exists(args.config):
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+            
+    sensitivity = config.get('sensitivity', 'normal')
+    print(f"Analysis Sensitivity: {sensitivity}")
+
+    # Analyze Summary
+    if args.results and os.path.exists(args.results):
+        with open(args.results, 'r') as f:
+            summary = json.load(f)
+        
+        p95 = summary.get('metrics', {}).get('http_req_duration', {}).get('values', {}).get('p(95)', 0)
+        print(f"P95 Latency: {p95:.2f}ms")
+        
+        if p95 > 1000:
+            print("INSIGHT: High latency detected. Consider optimizing database queries.")
+        elif p95 < 200:
+            print("INSIGHT: Performance is excellent.")
+
+if __name__ == "__main__":
+    main()
+"""
+
 class NotificationAgent:
+    async def create_github_issue(self, context, title, body):
+        if not ClientSession or 'github' not in context.mcp_params:
+            return
+
+        repo = context.config.get('github_repo')
+        if not repo:
+            print("[WARN] GitHub MCP available but 'github_repo' not set in config.", flush=True)
+            return
+
+        if "/" not in repo:
+             print("[WARN] 'github_repo' must be in format 'owner/repo'.", flush=True)
+             return
+
+        owner, repo_name = repo.split('/', 1)
+        server_params = context.mcp_params['github']
+        
+        try:
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    
+                    await session.call_tool("create_issue", arguments={
+                        "owner": owner,
+                        "repo": repo_name,
+                        "title": title,
+                        "body": body
+                    })
+                    print(f"[SUCCESS] GitHub issue created in {repo}", flush=True)
+        except Exception as e:
+            print(f"[WARN] Failed to create GitHub issue: {e}", flush=True)
+
     def run(self, context: PipelineContext):
         log_comm("NotificationAgent", "MasterAgent", "Checking notification settings...")
+        
+        # GitHub Issue Creation on Failure
+        if context.sla_results and not context.sla_results.get('pass', True):
+            if 'github' in context.mcp_params:
+                print("[STATUS] SLA Failed. Attempting to create GitHub issue...", flush=True)
+                title = f"Performance Test Failure: {context.timestamp}"
+                body = f"SLA Failed for run {context.timestamp}.\n\n**Input**: {context.args.file or context.args.jira_key}\n\n{context.summary_md}"
+                try:
+                    asyncio.run(self.create_github_issue(context, title, body))
+                except Exception as e:
+                    print(f"[WARN] Error running async GitHub task: {e}", flush=True)
+
         if context.args.notify:
             print(f"[STATUS] Sending notification to {context.args.notify}", flush=True)
             try:
@@ -1022,6 +1292,7 @@ def main():
     
     # Define Agents
     agents = [
+        MCPAgent(),
         IngestionAgent(),
         GeneratorAgent(),
         ValidationAgent(),

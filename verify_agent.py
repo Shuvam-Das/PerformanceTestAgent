@@ -549,13 +549,53 @@ def test_csv_data_driving():
         log("CSV file missing or content mismatch", "FAIL")
         return False
 
-    finally:
-        # Restore
-        if original_content:
-            with open(script_path, 'w') as f:
-                f.write(original_content)
-        elif os.path.exists(script_path):
-            os.remove(script_path)
+def test_advanced_generator_features():
+    log("Testing advanced generator features (Correlation & Assertions)...", "INFO")
+    
+    input_data = {
+        "api_collection": {
+            "endpoints": [
+                {
+                    "method": "POST", 
+                    "url": "https://httpbin.org/post",
+                    "extract": { "token": "json:json.token" }
+                },
+                {
+                    "method": "GET",
+                    "url": "https://httpbin.org/get",
+                    "headers": { "Authorization": "Bearer {{token}}" },
+                    "assertions": ["status == 200"]
+                }
+            ]
+        },
+        "workload_scenario": {"executor": "constant-vus", "vus": 1, "duration": "1s"},
+        "sla": {"http_req_duration_p95_ms": 500}
+    }
+    
+    payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+    
+    res = requests.post(f"{BASE_URL}/run", json=payload)
+    if res.status_code != 200:
+        log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+        return False
+        
+    # Wait for completion
+    for _ in res.iter_lines(): pass
+    
+    # Verify Output
+    res = requests.get(f"{BASE_URL}/api/history")
+    latest_run_data = res.json()[0]
+    run_name = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+    
+    # Check script.js for advanced logic
+    script_res = requests.get(f"{BASE_URL}/results/{run_name}/scripts/script.js")
+    if script_res.status_code == 200:
+        script_content = script_res.text
+        if "vars['token'] = res.json('json.token')" in script_content and "checkFailureRate" in script_content:
+            log("All advanced generator features verified", "PASS")
+            return True
+    log("Advanced features missing in script", "FAIL")
+    return False
 
 def test_extracted_file_management():
     log("Testing extracted file management APIs...", "INFO")
@@ -637,6 +677,146 @@ def test_download_artifact():
         log(f"Download API failed: {res.status_code}", "FAIL")
         return False
 
+def test_http_methods_support():
+    log("Testing support for various HTTP methods...", "INFO")
+    
+    input_data = {
+        "api_collection": {
+            "endpoints": [
+                {"method": "GET", "url": "https://httpbin.org/get"},
+                {"method": "POST", "url": "https://httpbin.org/post", "body": {"foo": "bar"}},
+                {"method": "PUT", "url": "https://httpbin.org/put", "body": {"foo": "bar"}},
+                {"method": "PATCH", "url": "https://httpbin.org/patch", "body": {"foo": "bar"}},
+                {"method": "DELETE", "url": "https://httpbin.org/delete"},
+                {"method": "OPTIONS", "url": "https://httpbin.org/anything"}
+            ]
+        },
+        "workload_scenario": {"executor": "shared-iterations", "vus": 1, "iterations": 1},
+        "sla": {"http_req_duration_p95_ms": 1000}
+    }
+    
+    payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+    
+    res = requests.post(f"{BASE_URL}/run", json=payload)
+    if res.status_code != 200:
+        log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+        return False
+        
+    # Wait for completion
+    for _ in res.iter_lines(): pass
+    
+    # Verify Output
+    res = requests.get(f"{BASE_URL}/api/history")
+    latest_run_data = res.json()[0]
+    run_name = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+    
+    # Check script.js
+    script_res = requests.get(f"{BASE_URL}/results/{run_name}/scripts/script.js")
+    if script_res.status_code == 200:
+        content = script_res.text
+        methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+        missing = []
+        for m in methods:
+            # Check for http.request('METHOD', ...)
+            if f"http.request('{m}'" not in content:
+                missing.append(m)
+        
+        if not missing:
+            log("All HTTP methods generated correctly using http.request", "PASS")
+            return True
+        else:
+            log(f"Missing methods in script: {missing}", "FAIL")
+            return False
+    else:
+        log("Failed to retrieve generated script", "FAIL")
+        return False
+
+def test_graphql_support():
+    log("Testing GraphQL support...", "INFO")
+    
+    input_data = {
+        "api_collection": {
+            "endpoints": [
+                {
+                    "method": "POST",
+                    "url": "https://graphql.example.com",
+                    "graphql": {
+                        "query": "query GetUser($id: ID!) { user(id: $id) { name } }",
+                        "variables": {"id": "{{userId}}"}
+                    }
+                }
+            ]
+        },
+        "workload_scenario": {"executor": "shared-iterations", "vus": 1, "iterations": 1},
+        "test_data": {"file": "users.csv", "content": "userId\n123"}
+    }
+    
+    payload = {"mode": "file", "fileContent": input_data, "dryRun": True}
+    
+    res = requests.post(f"{BASE_URL}/run", json=payload)
+    if res.status_code != 200:
+        log(f"Pipeline failed to start: {res.status_code}", "FAIL")
+        return False
+        
+    # Wait for completion
+    for _ in res.iter_lines(): pass
+    
+    # Verify Output
+    res = requests.get(f"{BASE_URL}/api/history")
+    latest_run_data = res.json()[0]
+    run_name = latest_run_data['name'] if isinstance(latest_run_data, dict) else latest_run_data
+    
+    script_res = requests.get(f"{BASE_URL}/results/{run_name}/scripts/script.js")
+    if script_res.status_code == 200:
+        content = script_res.text
+        if 'query GetUser' in content and 'variables' in content:
+            log("GraphQL query and variables found in script", "PASS")
+            return True
+        else:
+            log("GraphQL content missing from script", "FAIL")
+            return False
+    else:
+        log("Failed to retrieve generated script", "FAIL")
+        return False
+
+def test_mcp_agent():
+    log("Testing MCPAgent functionality...", "INFO")
+    
+    input_data = {
+        "api_collection": {"endpoints": [{"method": "GET", "url": "https://httpbin.org/get"}]},
+        "sla": {"http_req_duration_p95_ms": 500},
+        "workload_scenario": {"executor": "shared-iterations", "vus": 1, "iterations": 1}
+    }
+    
+    payload = {"mode": "file", "fileContent": input_data, "dryRun": True, "verbose": True}
+    
+    try:
+        res = requests.post(f"{BASE_URL}/run", json=payload, stream=True)
+        logs = []
+        for line in res.iter_lines():
+            if line:
+                decoded = line.decode('utf-8')
+                logs.append(decoded)
+        
+        mcp_installed = any("Ensuring MCP packages are installed" in l for l in logs)
+        fs_registered = any("Registered Filesystem MCP" in l for l in logs)
+        
+        if mcp_installed:
+            log("MCPAgent attempted package installation", "PASS")
+        else:
+            # Might skip if npm missing, which is a valid state but worth noting
+            log("MCPAgent did not attempt installation (npm might be missing)", "WARN")
+                
+        if fs_registered:
+            log("MCPAgent registered Filesystem server", "PASS")
+            return True
+        else:
+            log("MCPAgent failed to register Filesystem server (mcp lib might be missing)", "WARN")
+            return False # Return False if strict check needed, but WARN allows continuation if env is partial
+    except Exception as e:
+        log(f"MCPAgent test failed: {e}", "FAIL")
+        return False
+
 def main():
     print("=== Starting Verification Script ===\n")
     
@@ -659,6 +839,9 @@ def main():
     test_advanced_generator_features()
     test_extracted_file_management()
     test_download_artifact()
+    test_http_methods_support()
+    test_graphql_support()
+    test_mcp_agent()
     
     print("\n=== Verification Complete ===")
 

@@ -5,3 +5,4 @@ reportlab
 matplotlib
 psutil
 google-genai
+mcp

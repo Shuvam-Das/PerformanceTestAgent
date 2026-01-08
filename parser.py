@@ -5,31 +5,32 @@ import requests
 import shlex
 
 def parse_input(config):
-    content = ""
+    content = config.get('content', "")
     diagnostics = []
 
     # 1. Input Ingestion
-    if config.get('jira'):
-        try:
-            jira = config['jira']
-            headers = {}
-            if jira.get('auth'):
-                headers['Authorization'] = jira['auth']
-            
-            url = f"{jira['base_url']}/rest/api/2/issue/{jira['issue_key']}"
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            content = response.json().get('fields', {}).get('description', "")
-        except Exception as e:
-            diagnostics.append({"path": "$.jira", "reason": f"Failed to fetch Jira issue: {str(e)}"})
-    elif config.get('file'):
-        try:
-            with open(config['file'], 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            diagnostics.append({"path": "$.file", "reason": f"Failed to read local file: {str(e)}"})
-    else:
-        diagnostics.append({"path": "$", "reason": "No input source provided (Jira or File)"})
+    if not content:
+        if config.get('jira'):
+            try:
+                jira = config['jira']
+                headers = {}
+                if jira.get('auth'):
+                    headers['Authorization'] = jira['auth']
+                
+                url = f"{jira['base_url']}/rest/api/2/issue/{jira['issue_key']}"
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()
+                content = response.json().get('fields', {}).get('description', "")
+            except Exception as e:
+                diagnostics.append({"path": "$.jira", "reason": f"Failed to fetch Jira issue: {str(e)}"})
+        elif config.get('file'):
+            try:
+                with open(config['file'], 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except Exception as e:
+                diagnostics.append({"path": "$.file", "reason": f"Failed to read local file: {str(e)}"})
+        else:
+            diagnostics.append({"path": "$", "reason": "No input source provided (Jira or File)"})
 
     if diagnostics:
         return {"result": None, "diagnostics": diagnostics}
