@@ -727,6 +727,17 @@ def system_health():
     
     return jsonify(health)
 
+@app.route('/api/architecture', methods=['GET'])
+def get_architecture():
+    if not os.path.exists('ARCHITECTURE.md'):
+        return jsonify({'error': 'Architecture file not found'}), 404
+    try:
+        with open('ARCHITECTURE.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+        return jsonify({'content': content})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.json

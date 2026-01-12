@@ -817,6 +817,39 @@ def test_mcp_agent():
         log(f"MCPAgent test failed: {e}", "FAIL")
         return False
 
+def test_ui_load():
+    log("Testing UI accessibility...", "INFO")
+    try:
+        res = requests.get(BASE_URL)
+        if res.status_code == 200 and "<title>Performance Test Agent</title>" in res.text:
+            log("UI loaded successfully", "PASS")
+            return True
+        else:
+            log(f"UI failed to load: {res.status_code}", "FAIL")
+            return False
+    except Exception as e:
+        log(f"UI test failed: {e}", "FAIL")
+        return False
+
+def test_architecture_endpoint():
+    log("Testing architecture endpoint...", "INFO")
+    try:
+        res = requests.get(f"{BASE_URL}/api/architecture")
+        if res.status_code == 200:
+            data = res.json()
+            if 'content' in data and 'mermaid' in data['content']:
+                log("Architecture endpoint returned valid content", "PASS")
+                return True
+            else:
+                log("Architecture endpoint returned unexpected content", "FAIL")
+                return False
+        else:
+            log(f"Architecture endpoint failed: {res.status_code}", "FAIL")
+            return False
+    except Exception as e:
+        log(f"Architecture endpoint test failed: {e}", "FAIL")
+        return False
+
 def main():
     print("=== Starting Verification Script ===\n")
     
@@ -842,6 +875,8 @@ def main():
     test_http_methods_support()
     test_graphql_support()
     test_mcp_agent()
+    test_ui_load()
+    test_architecture_endpoint()
     
     print("\n=== Verification Complete ===")
 

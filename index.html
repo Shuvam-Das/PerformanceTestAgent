@@ -11,8 +11,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
-      body {
+      [data-bs-theme="light"] body {
         background-color: #f8f9fa;
       }
       /* Professional Console Styling */
@@ -154,6 +155,15 @@
         margin-bottom: 15px;
         border: 1px solid #dee2e6;
       }
+      [data-bs-theme="dark"] .chat-window {
+        background-color: #2b3035;
+        color: #dee2e6;
+        border-color: #495057;
+      }
+      [data-bs-theme="dark"] .chat-footer {
+        background-color: #2b3035;
+        border-top-color: #495057;
+      }
       .chat-header {
         background-color: #0d6efd;
         color: white;
@@ -168,6 +178,9 @@
         padding: 15px;
         overflow-y: auto;
         background-color: #f8f9fa;
+      }
+      [data-bs-theme="dark"] .chat-body {
+        background-color: #212529;
       }
       .chat-footer {
         padding: 10px;
@@ -185,6 +198,9 @@
         border-radius: 8px;
         margin-bottom: 15px;
       }
+      [data-bs-theme="dark"] .agent-grid {
+        background-color: #212529;
+      }
       .agent-card {
         width: 140px;
         background: white;
@@ -196,6 +212,11 @@
         opacity: 0.6;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
       }
+      [data-bs-theme="dark"] .agent-card {
+        background-color: #2b3035;
+        border-color: #495057;
+        color: #dee2e6;
+      }
       .agent-card.active {
         opacity: 1;
         border-color: #0d6efd;
@@ -206,6 +227,9 @@
         opacity: 1;
         border-color: #dc3545;
         background-color: #fff5f5;
+      }
+      [data-bs-theme="dark"] .agent-card.error {
+        background-color: #441c1f;
       }
       .agent-icon {
         font-size: 24px;
@@ -255,9 +279,22 @@
   </head>
   <body class="p-4">
     <div class="container">
-      <header class="mb-4 pb-2 border-bottom">
-        <h1>🚀 Performance Test Agent</h1>
-        <p class="text-muted">Autonomous Load Testing Pipeline Orchestrator</p>
+      <header
+        class="mb-4 pb-2 border-bottom d-flex justify-content-between align-items-center"
+      >
+        <div>
+          <h1>🚀 Performance Test Agent</h1>
+          <p class="text-muted mb-0">
+            Autonomous Load Testing Pipeline Orchestrator
+          </p>
+        </div>
+        <button
+          class="btn btn-outline-secondary"
+          id="themeToggle"
+          onclick="toggleTheme()"
+        >
+          🌙 Dark Mode
+        </button>
       </header>
 
       <div class="row">
@@ -635,6 +672,17 @@
                       System Health
                     </button>
                   </li>
+                  <li class="nav-item">
+                    <button
+                      class="nav-link"
+                      id="arch-tab"
+                      data-bs-toggle="tab"
+                      data-bs-target="#arch-pane"
+                      type="button"
+                    >
+                      Architecture
+                    </button>
+                  </li>
                 </ul>
                 <span id="statusBadge" class="badge bg-secondary">Idle</span>
               </div>
@@ -756,6 +804,24 @@
                     >
                       0%
                     </div>
+                  </div>
+                </div>
+                <!-- Architecture Pane -->
+                <div
+                  class="tab-pane fade h-100 p-3"
+                  id="arch-pane"
+                  style="overflow-y: auto"
+                >
+                  <div class="d-flex justify-content-end mb-2">
+                    <button
+                      class="btn btn-sm btn-outline-primary"
+                      onclick="downloadArchitectureSvg()"
+                    >
+                      Download SVG
+                    </button>
+                  </div>
+                  <div class="d-flex justify-content-center">
+                    <div class="mermaid" id="archGraph"></div>
                   </div>
                 </div>
               </div>
@@ -3055,6 +3121,96 @@
         }
       }
 
+      // Architecture Diagram Logic
+      mermaid.initialize({ startOnLoad: false });
+      document
+        .getElementById("arch-tab")
+        .addEventListener("shown.bs.tab", loadArchitecture);
+
+      async function loadArchitecture() {
+        const container = document.getElementById("archGraph");
+        if (container.getAttribute("data-loaded") === "true") return;
+
+        container.innerHTML =
+          '<div class="text-center text-muted mt-5">Loading diagram...</div>';
+
+        try {
+          const res = await fetch("/api/architecture");
+          const data = await res.json();
+
+          if (data.error) {
+            container.innerHTML = `<div class="text-danger text-center mt-5">${data.error}</div>`;
+            return;
+          }
+
+          const match = data.content.match(/```mermaid([\s\S]*?)```/);
+          if (match && match[1]) {
+            container.innerHTML = match[1].trim();
+            container.removeAttribute("data-processed");
+            await mermaid.run({ nodes: [container] });
+            container.setAttribute("data-loaded", "true");
+          } else {
+            container.innerHTML =
+              '<div class="text-warning text-center mt-5">No Mermaid diagram found in ARCHITECTURE.md</div>';
+          }
+        } catch (e) {
+          container.innerHTML = `<div class="text-danger text-center mt-5">Error: ${e.message}</div>`;
+        }
+      }
+
+      function downloadArchitectureSvg() {
+        const container = document.getElementById("archGraph");
+        const svg = container.querySelector("svg");
+        if (!svg) {
+          alert("Diagram not rendered yet.");
+          return;
+        }
+
+        const serializer = new XMLSerializer();
+        let source = serializer.serializeToString(svg);
+
+        if (
+          !source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)
+        ) {
+          source = source.replace(
+            /^<svg/,
+            '<svg xmlns="http://www.w3.org/2000/svg"'
+          );
+        }
+
+        source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
+        const url =
+          "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
+
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = "architecture.svg";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
+
+      // Theme Logic
+      function toggleTheme() {
+        const html = document.documentElement;
+        const current = html.getAttribute("data-bs-theme");
+        const next = current === "dark" ? "light" : "dark";
+        html.setAttribute("data-bs-theme", next);
+        localStorage.setItem("theme", next);
+        updateThemeIcon(next);
+      }
+
+      function updateThemeIcon(theme) {
+        const btn = document.getElementById("themeToggle");
+        if (theme === "dark") {
+          btn.textContent = "☀️ Light Mode";
+          btn.classList.replace("btn-outline-secondary", "btn-outline-light");
+        } else {
+          btn.textContent = "🌙 Dark Mode";
+          btn.classList.replace("btn-outline-light", "btn-outline-secondary");
+        }
+      }
+
       // Agent Orchestration Logic
       const agents = [
         { id: "MasterAgent", name: "Master Agent", icon: "🧠" },
@@ -3153,6 +3309,11 @@
 
       // Load Config on Startup
       window.addEventListener("DOMContentLoaded", async () => {
+        // Init Theme
+        const savedTheme = localStorage.getItem("theme") || "light";
+        document.documentElement.setAttribute("data-bs-theme", savedTheme);
+        updateThemeIcon(savedTheme);
+
         // Add listener for output tabs to start/stop health monitor
         document
           .querySelectorAll('#outputTabs button[data-bs-toggle="tab"]')
